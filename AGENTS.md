@@ -13,6 +13,7 @@ This is a security tool. Treat every weakening of the defaults as a bug.
 main.go                      CLI: hook | install | uninstall | status | check | version
 install.sh                   setup script (sh): build + go install . + rufix install; --revert uninstalls
 install.ps1                  setup script (PowerShell): same, flags -Project / -Revert
+install.cmd                  cmd.exe wrapper over install.ps1: remaps --project/--revert to switches
 internal/envfile/            KEY=VALUE parsing + secrets-file resolution order
 internal/redact/             replacement core: exact-value map + format rules
 internal/hook/               Claude Code hook contracts (stdin JSON in/out)

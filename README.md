@@ -65,6 +65,7 @@ One command does everything (build → global binary → hooks → verification)
 ```bash
 ./install.sh              # sh: git-bash, Linux, macOS
 .\install.ps1             # Windows PowerShell
+install.cmd               # Windows cmd.exe — runs install.ps1, remaps --flags to -Switches
 ```
 
 Flags:
@@ -96,7 +97,7 @@ Hook commands reference the absolute path of the executable that ran
 
 ```bash
 # Uninstall (hooks first, then the binary)
-./install.sh --revert     # or: .\install.ps1 -Revert
+./install.sh --revert     # or: .\install.ps1 -Revert, or: install.cmd --revert
 
 # Manual equivalent:
 rufix uninstall            # hooks, global settings
