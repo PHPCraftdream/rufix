@@ -13,6 +13,10 @@ type RuleData struct {
 	RestoreMatch   string // optional reverse regex ("and back"), applied by Restore
 	RestoreReplace string
 	AllowlistSeed  bool // forward replacements seed the Bash restore allowlist
+	// StrictTLD matches the TLD only at the end of a domain: a match followed
+	// by "." + domain char (a middle label like XCom.UP) is rejected. Without
+	// it the matched name may be a middle label, since RE2 has no lookahead.
+	StrictTLD bool
 }
 
 type compiledRule struct {

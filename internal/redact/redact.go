@@ -121,8 +121,22 @@ func (st *Store) Redact(s string) (string, int) {
 		}
 	}
 	for _, r := range st.rules {
-		if matches := r.re.FindAllString(s, -1); len(matches) > 0 {
-			count += len(matches)
+		if locs := r.re.FindAllStringIndex(s, -1); len(locs) > 0 {
+			if r.data.StrictTLD {
+				var seed func(repl, matched string)
+				if r.data.AllowlistSeed {
+					seed = func(repl, matched string) {
+						st.mu.Lock()
+						st.seeds[repl] = matched
+						st.mu.Unlock()
+					}
+				}
+				filtered, n := replaceStrictTLD(s, r.re, r.data.Replace, seed)
+				count += n
+				s = filtered
+				continue
+			}
+			count += len(locs)
 			if r.data.AllowlistSeed {
 				s = r.re.ReplaceAllStringFunc(s, func(m string) string {
 					repl := r.re.ReplaceAllString(m, r.data.Replace)
@@ -137,6 +151,42 @@ func (st *Store) Redact(s string) (string, int) {
 		}
 	}
 	return s, count
+}
+
+// replaceStrictTLD applies re/template but drops matches that are not at the
+// end of a domain: a following "." + domain char means the matched name is a
+// middle label, not a TLD.
+func replaceStrictTLD(s string, re *regexp.Regexp, template string, seed func(repl, matched string)) (string, int) {
+	locs := re.FindAllStringIndex(s, -1)
+	var b strings.Builder
+	last, count := 0, 0
+	for _, loc := range locs {
+		if isMidLabelTail(s, loc[1]) {
+			continue
+		}
+		b.WriteString(s[last:loc[0]])
+		matched := s[loc[0]:loc[1]]
+		repl := re.ReplaceAllString(matched, template)
+		if seed != nil {
+			seed(repl, matched)
+		}
+		b.WriteString(repl)
+		last = loc[1]
+		count++
+	}
+	b.WriteString(s[last:])
+	return b.String(), count
+}
+
+// isMidLabelTail reports whether position end continues a domain: "." plus a
+// domain char (e.g. "XCom.UP" — the matched name is a middle label).
+func isMidLabelTail(s string, end int) bool {
+	return end < len(s) && s[end] == '.' && end+1 < len(s) && isDomainChar(s[end+1])
+}
+
+func isDomainChar(c byte) bool {
+	return c == '-' || c == '_' || (c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // HostPlaceholder reports whether s contains something the Bash restore
@@ -171,6 +221,12 @@ func (st *Store) Restore(s string) (string, int) {
 	for i := len(st.rules) - 1; i >= 0; i-- {
 		r := st.rules[i]
 		if r.restoreRe == nil {
+			continue
+		}
+		if r.data.StrictTLD {
+			restored, n := replaceStrictTLD(s, r.restoreRe, r.data.RestoreReplace, nil)
+			count += n
+			s = restored
 			continue
 		}
 		if matches := r.restoreRe.FindAllString(s, -1); len(matches) > 0 {
