@@ -1,0 +1,7 @@
+rufix
+rufix.exe
+*.test
+
+# real secret replacements never leave the machine;
+# commits carry only test fixtures (rufix_test_code_secret_number_001 style)
+secrets/

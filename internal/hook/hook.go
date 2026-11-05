@@ -1,0 +1,176 @@
+// Package hook implements the Claude Code hook contract: redact tool output
+// on PostToolUse, restore placeholders in Bash commands on PreToolUse.
+package hook
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	"rufix/internal/envfile"
+	"rufix/internal/redact"
+	"rufix/internal/secretvalues"
+)
+
+// Config carries the injectable environment for Run.
+type Config struct {
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
+	Env     func(string) string
+	Stat    func(string) bool
+	ExeDir  string
+	HomeDir string
+	// Rules overrides the filter set; nil means the skip-worktree values.go
+	// Rules() output. Tests inject their own set to stay deterministic.
+	Rules []redact.RuleData
+}
+
+type request struct {
+	HookEventName string `json:"hook_event_name"`
+	ToolName      string `json:"tool_name"`
+	ToolInput     any    `json:"tool_input"`
+	ToolResponse  any    `json:"tool_response"`
+	Cwd           string `json:"cwd"`
+}
+
+// Run processes one hook invocation. Returns the process exit code:
+// 0 on success (with or without output), 2 on a blocking error — the caller
+// (main) exits with it so Claude Code blocks the tool call, fail-closed.
+func Run(cfg Config) int {
+	data, err := io.ReadAll(cfg.Stdin)
+	if err != nil {
+		return blocking(cfg, "read stdin: %v", err)
+	}
+	var req request
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&req); err != nil {
+		return blocking(cfg, "parse hook JSON: %v", err)
+	}
+	store, err := loadStore(req.Cwd, cfg)
+	if err != nil {
+		return blocking(cfg, "%v", err)
+	}
+	switch req.HookEventName {
+	case "PostToolUse":
+		return postToolUse(cfg, req, store)
+	case "PreToolUse":
+		return preToolUse(cfg, req, store)
+	default:
+		return 0
+	}
+}
+
+func loadStore(cwd string, cfg Config) (*redact.Store, error) {
+	vars := map[string]string{}
+	if path := envfile.Resolve(cwd, cfg.ExeDir, cfg.HomeDir, cfg.Env, cfg.Stat); path != "" {
+		loaded, err := envfile.Load(path)
+		if err != nil {
+			return nil, fmt.Errorf("load secrets %s: %w", path, err)
+		}
+		vars = loaded
+	} else {
+		fmt.Fprintln(cfg.Stderr, "rufix: secrets file not found; using compiled values with format rules")
+	}
+	secretvalues.Overlay(vars)
+	rules := cfg.Rules
+	if rules == nil {
+		rules = secretvalues.Rules()
+	}
+	return redact.NewWithRules(vars, rules), nil
+}
+
+func postToolUse(cfg Config, req request, store *redact.Store) int {
+	n := 0
+	redacted := mapStrings(req.ToolResponse, store.Redact, &n)
+	if n == 0 {
+		return 0
+	}
+	field := "updatedToolOutput"
+	if strings.HasPrefix(req.ToolName, "mcp__") {
+		field = "updatedMCPToolOutput"
+	}
+	specific := map[string]any{
+		"hookEventName": "PostToolUse",
+		field:           redacted,
+	}
+	if err := writeJSON(cfg.Stdout, map[string]any{"hookSpecificOutput": specific}); err != nil {
+		return blocking(cfg, "marshal output: %v", err)
+	}
+	fmt.Fprintf(cfg.Stderr, "rufix: redacted %d occurrence(s) in %s\n", n, req.ToolName)
+	return 0
+}
+
+func preToolUse(cfg Config, req request, store *redact.Store) int {
+	if req.ToolName != "Bash" {
+		return 0
+	}
+	command, ok := stringField(req.ToolInput, "command")
+	if !ok || !store.HostPlaceholder(command) {
+		return 0
+	}
+	n := 0
+	restored := mapStrings(req.ToolInput, store.Restore, &n)
+	if n == 0 {
+		return 0
+	}
+	if err := writeJSON(cfg.Stdout, map[string]any{"hookSpecificOutput": map[string]any{
+		"hookEventName": "PreToolUse",
+		"updatedInput":  restored,
+	}}); err != nil {
+		return blocking(cfg, "marshal output: %v", err)
+	}
+	fmt.Fprintf(cfg.Stderr, "rufix: restored %d placeholder(s) in Bash command\n", n)
+	return 0
+}
+
+func stringField(v any, key string) (string, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	s, ok := m[key].(string)
+	return s, ok
+}
+
+// mapStrings rebuilds a decoded JSON value applying f to every string,
+// preserving the exact structure (and therefore the tool output shape).
+func mapStrings(v any, f func(string) (string, int), n *int) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, vv := range x {
+			out[k] = mapStrings(vv, f, n)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, vv := range x {
+			out[i] = mapStrings(vv, f, n)
+		}
+		return out
+	case string:
+		s, c := f(x)
+		*n += c
+		return s
+	default:
+		return v
+	}
+}
+
+func writeJSON(w io.Writer, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(b, '\n'))
+	return err
+}
+
+func blocking(cfg Config, format string, args ...any) int {
+	fmt.Fprintf(cfg.Stderr, "rufix: blocking error: "+format+"\n", args...)
+	return 2
+}
