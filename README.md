@@ -1,7 +1,7 @@
 # rufix
 
 [![CI](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml/badge.svg)](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT_OR_Apache--2.0-blue.svg)](#license)
 [![Go](https://img.shields.io/github/go-mod/go-version/PHPCraftdream/rufix?logo=go&logoColor=white)](https://go.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/PHPCraftdream/rufix)](https://goreportcard.com/report/github.com/PHPCraftdream/rufix)
 
@@ -218,4 +218,9 @@ gateway.
 
 ## License
 
-[MIT](LICENSE)
+Dual-licensed under either of:
+
+- [MIT](LICENSE-MIT)
+- [Apache-2.0](LICENSE-APACHE)
+
+at your option.

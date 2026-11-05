@@ -18,7 +18,7 @@ import (
 	"rufix/internal/secretvalues"
 )
 
-const version = "rufix 1.0.0"
+const version = "rufix 0.1.0"
 
 const usage = `rufix — keep secrets out of the model context
 
