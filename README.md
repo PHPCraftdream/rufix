@@ -1,5 +1,10 @@
 # rufix
 
+[![CI](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml/badge.svg)](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/PHPCraftdream/rufix?logo=go&logoColor=white)](https://go.dev)
+[![Go Report Card](https://goreportcard.com/badge/github.com/PHPCraftdream/rufix)](https://goreportcard.com/report/github.com/PHPCraftdream/rufix)
+
 Keep secrets and internal hosts out of the model context in Claude Code.
 
 `rufix` is a single Go binary that acts as a pair of
