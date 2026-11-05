@@ -93,7 +93,10 @@ rufix check
 ```
 
 Hook commands reference the absolute path of the executable that ran
-`install` — run step 3 from the installed binary, not from `go run`.
+`install`, and every install **fully reinstalls** the rufix hook entries:
+stale entries from previous installs are removed and re-added fresh after
+the rebuild, while foreign hooks are preserved. Run step 3 from the
+installed binary (step 2), not from a temp `go run` build.
 
 ```bash
 # Uninstall (hooks first, then the binary)

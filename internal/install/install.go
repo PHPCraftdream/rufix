@@ -39,20 +39,22 @@ func command(opts Options) string {
 	return fmt.Sprintf("%q hook", filepath.ToSlash(filepath.Join(opts.ExeDir, "rufix")))
 }
 
-// Install adds rufix hook entries (idempotently) and returns a summary.
+// Install fully reinstalls rufix hook entries: every existing rufix entry is
+// removed and re-added fresh (current executable path, timeouts), so an
+// install after a rebuild always yields a clean, up-to-date state. Existing
+// foreign hooks are preserved.
 func Install(opts Options) (string, error) {
 	settings, err := load(opts.Path)
 	if err != nil {
 		return "", err
 	}
 	hooks := ensureMap(settings, "hooks")
-	added := 0
+	replaced := 0
 	for _, e := range defaultEntries() {
 		list := ensureList(hooks, e.Event)
-		if hasRufixEntry(list) {
-			continue
-		}
-		list = append(list, map[string]any{
+		kept, removed := withoutRufixEntries(list)
+		replaced += removed
+		entry := map[string]any{
 			"matcher": e.Matcher,
 			"hooks": []map[string]any{{
 				"type":      "command",
@@ -60,17 +62,31 @@ func Install(opts Options) (string, error) {
 				"timeout":   e.Timeout,
 				"onFailure": "block",
 			}},
-		})
-		hooks[e.Event] = list
-		added++
-	}
-	if added == 0 {
-		return "already installed", nil
+		}
+		hooks[e.Event] = append(kept, entry)
 	}
 	if err := save(opts.Path, settings); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("installed %d hook entr(y/ies) in %s", added, opts.Path), nil
+	if replaced > 0 {
+		return fmt.Sprintf("reinstalled %d hook entr(y/ies) in %s", replaced, opts.Path), nil
+	}
+	return fmt.Sprintf("installed %d hook entr(y/ies) in %s", len(defaultEntries()), opts.Path), nil
+}
+
+// withoutRufixEntries splits a matcher-entry list into foreign entries and
+// the count of rufix entries removed from it.
+func withoutRufixEntries(list []any) ([]any, int) {
+	kept := make([]any, 0, len(list))
+	removed := 0
+	for _, item := range list {
+		if rufixEntry(item) {
+			removed++
+			continue
+		}
+		kept = append(kept, item)
+	}
+	return kept, removed
 }
 
 // Uninstall removes every rufix hook entry and returns a summary.

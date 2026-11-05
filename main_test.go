@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,6 +47,24 @@ func TestInstallStatusUninstallViaCLI(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "installed: PostToolUse, PreToolUse") {
 		t.Errorf("status output: %q", out.String())
+	}
+
+	out.Reset()
+	if err := runSettings("install", []string{"--path", path}, &out); err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if !strings.Contains(out.String(), "reinstalled 2") {
+		t.Errorf("reinstall output: %q", out.String())
+	}
+	data2, _ := os.ReadFile(path)
+	var parsed2 struct {
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(data2, &parsed2); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed2.Hooks["PostToolUse"]) != 1 || len(parsed2.Hooks["PreToolUse"]) != 1 {
+		t.Errorf("reinstall must keep exactly one entry per event: %s", data2)
 	}
 
 	out.Reset()

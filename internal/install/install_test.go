@@ -72,6 +72,10 @@ func TestInstallPreservesExistingHooks(t *testing.T) {
 	if _, err := Install(opts(path)); err != nil {
 		t.Fatal(err)
 	}
+	// Reinstall: foreign hooks survive, the fresh rufix entry replaces the old one.
+	if _, err := Install(opts(path)); err != nil {
+		t.Fatal(err)
+	}
 	data, _ := os.ReadFile(path)
 	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
@@ -83,11 +87,48 @@ func TestInstallPreservesExistingHooks(t *testing.T) {
 	hooks := parsed["hooks"].(map[string]any)
 	post := hooks["PostToolUse"].([]any)
 	if len(post) != 2 {
-		t.Errorf("existing hook must survive: %v", post)
+		t.Errorf("foreign hook must survive reinstall: %v", post)
+	}
+	first, _ := post[0].(map[string]any)
+	inner, _ := first["hooks"].([]any)
+	h0, _ := inner[0].(map[string]any)
+	if cmd, _ := h0["command"].(string); !strings.Contains(cmd, "cah-stamp") {
+		t.Errorf("foreign hook must be the first untouched entry: %+v", h0)
 	}
 }
 
-func TestInstallIsIdempotent(t *testing.T) {
+func TestInstallReinstallsStaleEntries(t *testing.T) {
+	stale := `{"hooks":{"PostToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"C:/old/place/rufix\" hook","timeout":5}]}],"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"\"C:/old/place/rufix\" hook","timeout":5}]}]}}`
+	path := settingsPath(t, stale)
+	summary, err := Install(opts(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary, "reinstalled 2") {
+		t.Errorf("summary=%q", summary)
+	}
+	data, _ := os.ReadFile(path)
+	var parsed struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Command string `json:"command"`
+				Timeout int    `json:"timeout"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if got := parsed.Hooks["PostToolUse"]; len(got) != 1 || got[0].Hooks[0].Command != `"/tools/rufix" hook` || got[0].Hooks[0].Timeout != 30 {
+		t.Errorf("stale entry must be replaced with the fresh one: %+v", got)
+	}
+	if got := parsed.Hooks["PreToolUse"]; len(got) != 1 || got[0].Hooks[0].Timeout != 10 {
+		t.Errorf("PreToolUse = %+v", got)
+	}
+}
+
+func TestInstallReinstallKeepsSingleEntry(t *testing.T) {
 	path := settingsPath(t, "")
 	if _, err := Install(opts(path)); err != nil {
 		t.Fatal(err)
@@ -96,7 +137,7 @@ func TestInstallIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(summary, "already installed") {
+	if !strings.Contains(summary, "reinstalled 2") {
 		t.Errorf("summary=%q", summary)
 	}
 	data, _ := os.ReadFile(path)
