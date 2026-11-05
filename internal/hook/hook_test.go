@@ -174,6 +174,34 @@ func TestBlockingErrorOnBadJSON(t *testing.T) {
 	}
 }
 
+// TestPostToolUseNeverRestores guards the direction invariant: PostToolUse
+// must only redact. An already-masked name and a foreign placeholder must
+// pass through untouched; a reverse replacement here would leak real names
+// into the model context.
+func TestPostToolUseNeverRestores(t *testing.T) {
+	in := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"stdout":"mask api.intra_wilmington and foreign [S:abcd1234] and real ` + testToken + `"}}`
+	out, _, code := runHook(t, in, true)
+	if code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	if !strings.Contains(out, "api.intra_wilmington") || !strings.Contains(out, "[S:abcd1234]") {
+		t.Errorf("masked text must pass through untouched: %q", out)
+	}
+	if strings.Contains(out, testToken) || strings.Contains(out, testHost) {
+		t.Errorf("real values must be redacted: %q", out)
+	}
+}
+
+// TestPreToolUseNeverRedacts guards the other direction: PreToolUse must only
+// restore masked commands, never redact a plain command.
+func TestPreToolUseNeverRedacts(t *testing.T) {
+	in := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"curl https://api.vendor.com/v1 -H \"Authorization: Bearer ` + testToken + `\""}}`
+	out, _, code := runHook(t, in, true)
+	if code != 0 || out != "" {
+		t.Errorf("PreToolUse must not redact: code=%d out=%q", code, out)
+	}
+}
+
 // hashOf mirrors redact.placeholder hashing without exposing internals.
 func hashOf(value string) string {
 	st := redact.NewWithRules(map[string]string{"TOKEN": value}, nil)
