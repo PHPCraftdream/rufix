@@ -43,6 +43,21 @@ only when it references something the allowlist honours — a protected-host
 placeholder or a masked `AllowlistSeed` pattern (e.g. `*.intra`) — so a
 secret cannot be smuggled to a foreign host.
 
+### Verifying restore end-to-end
+
+Restore happens inside the tool call, so its effect is visible in what the
+command actually executed — not in `rufix hook` stdout (which is itself
+redacted on display). Byte-level check:
+
+```bash
+echo api.project.intra > /tmp/rt.txt   # a command referencing a masked host
+od -c /tmp/rt.txt                      # a p i . p r o j e c t . c o m — restore ran
+```
+
+If the file contains the real name, PreToolUse restored the mask before
+execution. Inspect results with `od`/hex dumps: plain stdout is redacted by
+the hook, which makes manual verification misleading.
+
 ## Install & setup
 
 One command does everything (build → global binary → hooks → verification):
