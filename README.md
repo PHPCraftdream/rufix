@@ -42,6 +42,7 @@ out:  token [REDACTED:atlassian-pat]
 |---|---|---|
 | `PostToolUse` | all tools | deep string walk over the tool response → `updatedToolOutput` / `updatedMCPToolOutput` |
 | `PreToolUse` | `Bash` | if the command contains a placeholder whose value is a protected host, restore all placeholders in it (`updatedInput`) |
+| `PreToolUse` | `mcp__*` | domain-only restore in tool arguments (`updatedInput`): masked names (`*.intra`) become real inside comments/links; credential `[S:hash]` placeholders are never restored into MCP arguments — no secret travels to the target server |
 
 Placeholders the model prints back are inert: a Bash command is restored
 only when it references something the allowlist honours — a protected-host

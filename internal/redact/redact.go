@@ -218,6 +218,23 @@ func (st *Store) HostPlaceholder(s string) bool {
 // *.intra -> *.com), then exact-value placeholders.
 func (st *Store) Restore(s string) (string, int) {
 	count := 0
+	s, n := st.RestoreDomains(s)
+	count += n
+	for p, v := range st.rest {
+		if strings.Contains(s, p) {
+			count += strings.Count(s, p)
+			s = strings.ReplaceAll(s, p, v)
+		}
+	}
+	return s, count
+}
+
+// RestoreDomains applies only the reverse rules (domain masks like
+// *.intra -> *.com). Exact [S:hash] placeholders are never touched, so it is
+// safe for MCP tool arguments: a domain mask may travel to the target server
+// inside a comment or link, a credential placeholder may not.
+func (st *Store) RestoreDomains(s string) (string, int) {
+	count := 0
 	for i := len(st.rules) - 1; i >= 0; i-- {
 		r := st.rules[i]
 		if r.restoreRe == nil {
@@ -234,13 +251,19 @@ func (st *Store) Restore(s string) (string, int) {
 			s = r.restoreRe.ReplaceAllString(s, r.data.RestoreReplace)
 		}
 	}
-	for p, v := range st.rest {
-		if strings.Contains(s, p) {
-			count += strings.Count(s, p)
-			s = strings.ReplaceAll(s, p, v)
+	return s, count
+}
+
+// HasDomainMask reports whether s contains a masked pattern of an
+// AllowlistSeed rule (a domain mask). Exact [S:hash] placeholders do not
+// trigger it.
+func (st *Store) HasDomainMask(s string) bool {
+	for _, r := range st.rules {
+		if r.data.AllowlistSeed && r.restoreRe != nil && r.restoreRe.MatchString(s) {
+			return true
 		}
 	}
-	return s, count
+	return false
 }
 
 // HasPlaceholders reports whether s contains any reversible placeholder.

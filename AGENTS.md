@@ -58,7 +58,11 @@ Windows, where `filepath.Dir`/`Join` use `\`).
    "Bash"` and only when `HostPlaceholder` holds: an exact `[S:hash]` whose
    value is a protected host, or a masked `AllowlistSeed` pattern (its
    `RestoreMatch` matches memory-free — hook calls are separate processes).
-   Widening the allowlist is out of the question without an explicit task.
+   MCP tools (`mcp__*`) get the domain-only restore (`RestoreDomains` +
+   `HasDomainMask`): reverse rules resolve masked names in comments/links,
+   exact `[S:hash]` placeholders are never restored into MCP arguments
+   because those arguments travel to the target server. Widening the
+   allowlist is out of the question without an explicit task.
 5. **Filters and values are data — P0.** The engine ships **zero rules and
    zero values**: by default nothing is replaced. Every filter, mask and
    value lives in the skip-worktree `internal/secretvalues/values.go`

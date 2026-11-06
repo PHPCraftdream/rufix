@@ -104,16 +104,33 @@ func postToolUse(cfg Config, req request, store *redact.Store) int {
 	return 0
 }
 
+// preToolUse restores masks in outbound tool arguments. Bash gets the full
+// restore (domain masks + exact placeholders). MCP tools get the domain-only
+// restore: their arguments travel to the target server, so a domain mask in
+// a comment/link is resolved, but a credential [S:hash] placeholder never is.
 func preToolUse(cfg Config, req request, store *redact.Store) int {
-	if req.ToolName != "Bash" {
-		return 0
-	}
-	command, ok := stringField(req.ToolInput, "command")
-	if !ok || !store.HostPlaceholder(command) {
+	domainOnly := false
+	switch {
+	case req.ToolName == "Bash":
+		command, ok := stringField(req.ToolInput, "command")
+		if !ok || !store.HostPlaceholder(command) {
+			return 0
+		}
+	case strings.HasPrefix(req.ToolName, "mcp__"):
+		domainOnly = true
+	default:
 		return 0
 	}
 	n := 0
-	restored := mapStrings(req.ToolInput, store.Restore, &n)
+	var restored any
+	if domainOnly {
+		if !mapStringsBool(req.ToolInput, store.HasDomainMask) {
+			return 0
+		}
+		restored = mapStrings(req.ToolInput, store.RestoreDomains, &n)
+	} else {
+		restored = mapStrings(req.ToolInput, store.Restore, &n)
+	}
 	if n == 0 {
 		return 0
 	}
@@ -123,7 +140,11 @@ func preToolUse(cfg Config, req request, store *redact.Store) int {
 	}}); err != nil {
 		return blocking(cfg, "marshal output: %v", err)
 	}
-	fmt.Fprintf(cfg.Stderr, "rufix: restored %d placeholder(s) in Bash command\n", n)
+	verb := "restored"
+	if domainOnly {
+		verb = "restored domain masks in"
+	}
+	fmt.Fprintf(cfg.Stderr, "rufix: %s %d placeholder(s) in %s\n", verb, n, req.ToolName)
 	return 0
 }
 
@@ -158,6 +179,30 @@ func mapStrings(v any, f func(string) (string, int), n *int) any {
 		return s
 	default:
 		return v
+	}
+}
+
+// mapStringsBool reports whether f matches at least one string in v.
+func mapStringsBool(v any, f func(string) bool) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		for _, vv := range x {
+			if mapStringsBool(vv, f) {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, vv := range x {
+			if mapStringsBool(vv, f) {
+				return true
+			}
+		}
+		return false
+	case string:
+		return f(x)
+	default:
+		return false
 	}
 }
 
