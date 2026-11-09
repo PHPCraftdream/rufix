@@ -3,12 +3,12 @@
 package hook
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
+	"rufix/internal/compiledregexp"
 	"rufix/internal/envfile"
 	"rufix/internal/redact"
 	"rufix/internal/secretvalues"
@@ -23,8 +23,9 @@ type Config struct {
 	Stat    func(string) bool
 	ExeDir  string
 	HomeDir string
-	// Rules overrides the filter set; nil means the skip-worktree values.go
-	// Rules() output. Tests inject their own set to stay deterministic.
+	LoadEnv bool
+	Vars    map[string]string // nil — встроенная карта; заданная карта заменяет её в тестах.
+	// nil — готовые программы локальных правил; тесты могут передать свой набор.
 	Rules []redact.RuleData
 }
 
@@ -40,12 +41,8 @@ type request struct {
 // 0 on success (with or without output), 2 on a blocking error — the caller
 // (main) exits with it so Claude Code blocks the tool call, fail-closed.
 func Run(cfg Config) int {
-	data, err := io.ReadAll(cfg.Stdin)
-	if err != nil {
-		return blocking(cfg, "read stdin: %v", err)
-	}
 	var req request
-	dec := json.NewDecoder(bytes.NewReader(data))
+	dec := json.NewDecoder(cfg.Stdin)
 	dec.UseNumber()
 	if err := dec.Decode(&req); err != nil {
 		return blocking(cfg, "parse hook JSON: %v", err)
@@ -66,21 +63,30 @@ func Run(cfg Config) int {
 
 func loadStore(cwd string, cfg Config) (*redact.Store, error) {
 	vars := map[string]string{}
-	if path := envfile.Resolve(cwd, cfg.ExeDir, cfg.HomeDir, cfg.Env, cfg.Stat); path != "" {
-		loaded, err := envfile.Load(path)
-		if err != nil {
-			return nil, fmt.Errorf("load secrets %s: %w", path, err)
+	if cfg.LoadEnv {
+		if path := envfile.Resolve(cwd, cfg.ExeDir, cfg.HomeDir, cfg.Env, cfg.Stat); path != "" {
+			loaded, err := envfile.Load(path)
+			if err != nil {
+				return nil, fmt.Errorf("load secrets %s: %w", path, err)
+			}
+			vars = loaded
+		} else {
+			fmt.Fprintln(cfg.Stderr, "rufix: secrets file not found; using compiled values with format rules")
 		}
-		vars = loaded
+	}
+	if cfg.Vars == nil {
+		secretvalues.Overlay(vars)
 	} else {
-		fmt.Fprintln(cfg.Stderr, "rufix: secrets file not found; using compiled values with format rules")
+		for key, value := range cfg.Vars {
+			if value != "" {
+				vars[key] = value
+			}
+		}
 	}
-	secretvalues.Overlay(vars)
-	rules := cfg.Rules
-	if rules == nil {
-		rules = secretvalues.Rules()
+	if cfg.Rules != nil {
+		return redact.NewWithRules(vars, cfg.Rules), nil
 	}
-	return redact.NewWithRules(vars, rules), nil
+	return redact.NewWithCompiledRules(vars, secretvalues.Rules(), compiledregexp.Lookup)
 }
 
 func postToolUse(cfg Config, req request, store *redact.Store) int {
@@ -157,22 +163,19 @@ func stringField(v any, key string) (string, bool) {
 	return s, ok
 }
 
-// mapStrings rebuilds a decoded JSON value applying f to every string,
-// preserving the exact structure (and therefore the tool output shape).
+// Декодированный JSON принадлежит вызову: меняем строки без копирования контейнеров.
 func mapStrings(v any, f func(string) (string, int), n *int) any {
 	switch x := v.(type) {
 	case map[string]any:
-		out := make(map[string]any, len(x))
 		for k, vv := range x {
-			out[k] = mapStrings(vv, f, n)
+			x[k] = mapStrings(vv, f, n)
 		}
-		return out
+		return x
 	case []any:
-		out := make([]any, len(x))
 		for i, vv := range x {
-			out[i] = mapStrings(vv, f, n)
+			x[i] = mapStrings(vv, f, n)
 		}
-		return out
+		return x
 	case string:
 		s, c := f(x)
 		*n += c

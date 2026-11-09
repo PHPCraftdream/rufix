@@ -21,8 +21,7 @@ func TestMCPRestoresDomainMaskInComment(t *testing.T) {
 		Stdin:  strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"mcp__atlassian__jira_add_comment","tool_input":{"issueKey":"P-1","comment":"see https://api.masked/page#anchor"}}`),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  mcpRules(),
 	})
 	if code != 0 || !strings.Contains(out.String(), "api.old.tld/page") || strings.Contains(out.String(), "masked") {
@@ -39,8 +38,7 @@ func TestMCPRestoresDomainButLeavesExactPlaceholders(t *testing.T) {
 		Stdin:  strings.NewReader(in),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   testVars,
 		Rules:  mcpRules(),
 	})
 	if code != 0 || strings.Contains(out.String(), testToken) || !strings.Contains(out.String(), "api.old.tld/x") || !strings.Contains(out.String(), "[S:") {
@@ -54,8 +52,7 @@ func TestMCPWithoutMasksSilent(t *testing.T) {
 		Stdin:  strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"mcp__atlassian__jira_add_comment","tool_input":{"comment":"plain text no masks"}}`),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  mcpRules(),
 	})
 	if code != 0 || out.String() != "" {
@@ -71,8 +68,7 @@ func TestMCPRestoresInsideNestedArrays(t *testing.T) {
 		Stdin:  strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"mcp__atlassian__jira_add_comment","tool_input":{"comments":["plain","see https://api.masked/x"],"meta":{"tags":["https://git.masked/r"]}}}`),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  mcpRules(),
 	})
 	if code != 0 || strings.Count(out.String(), "old.tld") != 2 || strings.Contains(out.String(), "masked") || strings.Contains(out.String(), "old.tld") == false || strings.Contains(out.String(), "masked") {
@@ -87,8 +83,7 @@ func TestPreToolUseNonStringCommandSilent(t *testing.T) {
 		Stdin:  strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":{"evil":"object"}}}`),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  mcpRules(),
 	})
 	if code != 0 || out.String() != "" {
@@ -103,8 +98,7 @@ func TestUnknownEventSilent(t *testing.T) {
 		Stdin:  strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"x"}}`),
 		Stdout: &out,
 		Stderr: &errb,
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  mcpRules(),
 	})
 	if code != 0 || out.String() != "" {
@@ -116,7 +110,7 @@ func TestUnknownEventSilent(t *testing.T) {
 func TestEmptyStdinBlocking(t *testing.T) {
 	var out, errb strings.Builder
 	code := Run(Config{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
-		Env: func(string) string { return "" }, Stat: func(string) bool { return false }})
+		Vars: map[string]string{}})
 	if code != 2 {
 		t.Errorf("empty stdin: code=%d", code)
 	}
@@ -134,8 +128,7 @@ func TestInvalidRegexPanics(t *testing.T) {
 		Stdin:  strings.NewReader(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"stdout":"x"}}`),
 		Stdout: &strings.Builder{},
 		Stderr: &strings.Builder{},
-		Env:    func(string) string { return "" },
-		Stat:   func(string) bool { return false },
+		Vars:   map[string]string{},
 		Rules:  []redact.RuleData{{Name: "bad", Match: "("}},
 	})
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# rufix setup: build, install the binary globally ($GOPATH/bin), wire hooks.
+# rufix: генерация regex, сборка, глобальная установка и подключение хуков.
 #
 # Usage:
 #   ./install.sh              install: build + go install . + rufix install (global settings)
@@ -29,6 +29,7 @@ if [ "$REVERT" = "1" ]; then
   exit 0
 fi
 
+go generate ./internal/secretvalues
 go build ./...
 go install .
 if command -v rufix >/dev/null 2>&1; then

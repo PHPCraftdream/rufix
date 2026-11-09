@@ -9,10 +9,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
+
+	"rufix/internal/compiledregexp"
 )
 
 type exact struct {
@@ -33,10 +34,22 @@ type Store struct {
 // NewWithRules builds a Store with the given filter set (data from the
 // skip-worktree values.go; the engine ships no rules of its own).
 func NewWithRules(vars map[string]string, rules []RuleData) *Store {
+	return newStore(vars, compileRules(rules))
+}
+
+func NewWithCompiledRules(vars map[string]string, rules []RuleData, lookup func(string) (*compiledregexp.Regexp, bool)) (*Store, error) {
+	compiled, err := loadCompiledRules(rules, lookup)
+	if err != nil {
+		return nil, err
+	}
+	return newStore(vars, compiled), nil
+}
+
+func newStore(vars map[string]string, rules []compiledRule) *Store {
 	st := &Store{
 		rest:  make(map[string]string),
 		seeds: make(map[string]string),
-		rules: compileRules(rules),
+		rules: rules,
 	}
 	st.addVars(vars)
 	sort.SliceStable(st.exact, func(i, j int) bool { return len(st.exact[i].value) > len(st.exact[j].value) })
@@ -115,64 +128,87 @@ func placeholder(value string) string { return "[S:" + hash8(value) + "]" }
 func (st *Store) Redact(s string) (string, int) {
 	count := 0
 	for _, e := range st.exact {
-		if strings.Contains(s, e.value) {
-			count += strings.Count(s, e.value)
-			s = strings.ReplaceAll(s, e.value, e.placeholder)
-		}
+		var n int
+		s, n = replaceExact(s, e.value, e.placeholder)
+		count += n
 	}
 	for _, r := range st.rules {
-		if locs := r.re.FindAllStringIndex(s, -1); len(locs) > 0 {
-			if r.data.StrictTLD {
-				var seed func(repl, matched string)
-				if r.data.AllowlistSeed {
-					seed = func(repl, matched string) {
-						st.mu.Lock()
-						st.seeds[repl] = matched
-						st.mu.Unlock()
-					}
-				}
-				filtered, n := replaceStrictTLD(s, r.re, r.data.Replace, seed)
-				count += n
-				s = filtered
-				continue
-			}
-			count += len(locs)
-			if r.data.AllowlistSeed {
-				s = r.re.ReplaceAllStringFunc(s, func(m string) string {
-					repl := r.re.ReplaceAllString(m, r.data.Replace)
-					st.mu.Lock()
-					st.seeds[repl] = m
-					st.mu.Unlock()
-					return repl
-				})
-			} else {
-				s = r.re.ReplaceAllString(s, r.data.Replace)
+		var seed func(repl, matched string)
+		if r.data.AllowlistSeed {
+			seed = func(repl, matched string) {
+				st.mu.Lock()
+				st.seeds[repl] = matched
+				st.mu.Unlock()
 			}
 		}
+		var n int
+		s, n = replaceRule(s, r.re.get(), r.data.Replace, r.data.StrictTLD, seed)
+		count += n
 	}
 	return s, count
 }
 
-// replaceStrictTLD applies re/template but drops matches that are not at the
-// end of a domain: a following "." + domain char means the matched name is a
-// middle label, not a TLD.
-func replaceStrictTLD(s string, re *regexp.Regexp, template string, seed func(repl, matched string)) (string, int) {
-	locs := re.FindAllStringIndex(s, -1)
+func replaceExact(s, old, replacement string) (string, int) {
+	start := strings.Index(s, old)
+	if start < 0 {
+		return s, 0
+	}
 	var b strings.Builder
+	b.Grow(len(s))
+	last, count := 0, 0
+	for start >= 0 {
+		b.WriteString(s[last:start])
+		b.WriteString(replacement)
+		last = start + len(old)
+		count++
+		next := strings.Index(s[last:], old)
+		if next < 0 {
+			break
+		}
+		start = last + next
+	}
+	b.WriteString(s[last:])
+	return b.String(), count
+}
+
+func replaceRule(s string, re matcher, template string, strict bool, seed func(repl, matched string)) (string, int) {
+	var locs [][]int
+	if strict || seed != nil {
+		locs = re.FindAllStringIndex(s, -1)
+	} else {
+		locs = re.FindAllStringSubmatchIndex(s, -1)
+	}
+	if len(locs) == 0 {
+		return s, 0
+	}
+	var b strings.Builder
+	var expanded []byte
 	last, count := 0, 0
 	for _, loc := range locs {
-		if isMidLabelTail(s, loc[1]) {
+		if strict && isMidLabelTail(s, loc[1]) {
 			continue
 		}
-		b.WriteString(s[last:loc[0]])
-		matched := s[loc[0]:loc[1]]
-		repl := re.ReplaceAllString(matched, template)
-		if seed != nil {
-			seed(repl, matched)
+		if count == 0 {
+			b.Grow(len(s))
 		}
-		b.WriteString(repl)
+		b.WriteString(s[last:loc[0]])
+		if strict || seed != nil {
+			// Сохраняем прежнюю семантику шаблона внутри отдельного совпадения.
+			matched := s[loc[0]:loc[1]]
+			repl := re.ReplaceAllString(matched, template)
+			if seed != nil {
+				seed(repl, matched)
+			}
+			b.WriteString(repl)
+		} else {
+			expanded = re.ExpandString(expanded[:0], template, s, loc)
+			b.Write(expanded)
+		}
 		last = loc[1]
 		count++
+	}
+	if count == 0 {
+		return s, 0
 	}
 	b.WriteString(s[last:])
 	return b.String(), count
@@ -194,13 +230,13 @@ func isDomainChar(c byte) bool {
 // masked pattern of an AllowlistSeed rule (memory-free: RestoreMatch matches
 // the masked text even in a fresh process), or an in-process seed.
 func (st *Store) HostPlaceholder(s string) bool {
-	for _, m := range placeholderRe.FindAllString(s, -1) {
-		if v, ok := st.rest[m]; ok && isProtectedHost(v) {
+	for token, tail := nextPlaceholder(s); token != ""; token, tail = nextPlaceholder(tail) {
+		if v, ok := st.rest[token]; ok && isProtectedHost(v) {
 			return true
 		}
 	}
 	for _, r := range st.rules {
-		if r.data.AllowlistSeed && r.restoreRe != nil && r.restoreRe.MatchString(s) {
+		if r.data.AllowlistSeed && r.restoreRe != nil && r.restoreRe.get().MatchString(s) {
 			return true
 		}
 	}
@@ -221,10 +257,9 @@ func (st *Store) Restore(s string) (string, int) {
 	s, n := st.RestoreDomains(s)
 	count += n
 	for p, v := range st.rest {
-		if strings.Contains(s, p) {
-			count += strings.Count(s, p)
-			s = strings.ReplaceAll(s, p, v)
-		}
+		var n int
+		s, n = replaceExact(s, p, v)
+		count += n
 	}
 	return s, count
 }
@@ -240,16 +275,9 @@ func (st *Store) RestoreDomains(s string) (string, int) {
 		if r.restoreRe == nil {
 			continue
 		}
-		if r.data.StrictTLD {
-			restored, n := replaceStrictTLD(s, r.restoreRe, r.data.RestoreReplace, nil)
-			count += n
-			s = restored
-			continue
-		}
-		if matches := r.restoreRe.FindAllString(s, -1); len(matches) > 0 {
-			count += len(matches)
-			s = r.restoreRe.ReplaceAllString(s, r.data.RestoreReplace)
-		}
+		var n int
+		s, n = replaceRule(s, r.restoreRe.get(), r.data.RestoreReplace, r.data.StrictTLD, nil)
+		count += n
 	}
 	return s, count
 }
@@ -259,7 +287,7 @@ func (st *Store) RestoreDomains(s string) (string, int) {
 // trigger it.
 func (st *Store) HasDomainMask(s string) bool {
 	for _, r := range st.rules {
-		if r.data.AllowlistSeed && r.restoreRe != nil && r.restoreRe.MatchString(s) {
+		if r.data.AllowlistSeed && r.restoreRe != nil && r.restoreRe.get().MatchString(s) {
 			return true
 		}
 	}
@@ -268,7 +296,8 @@ func (st *Store) HasDomainMask(s string) bool {
 
 // HasPlaceholders reports whether s contains any reversible placeholder.
 func (st *Store) HasPlaceholders(s string) bool {
-	return placeholderRe.MatchString(s)
+	token, _ := nextPlaceholder(s)
+	return token != ""
 }
 
 // Hosts returns the protected bare hosts.
@@ -279,5 +308,3 @@ func (st *Store) Hosts() []string { return st.hosts }
 func (st *Store) Stats() (exact, hosts, rules int) {
 	return len(st.exact), len(st.hosts), len(st.rules)
 }
-
-var placeholderRe = regexp.MustCompile(`\[S:[0-9a-f]{8}\]`)

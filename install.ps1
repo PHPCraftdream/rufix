@@ -1,4 +1,4 @@
-# rufix setup: build, install the binary globally ($GOPATH\bin), wire hooks.
+# rufix: генерация regex, сборка, глобальная установка и подключение хуков.
 #
 # Usage:
 #   .\install.ps1              install: build + go install . + rufix install (global settings)
@@ -26,8 +26,12 @@ if ($Revert) {
   exit 0
 }
 
+go generate ./internal/secretvalues
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 go build ./...
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 go install .
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (Get-Command rufix -ErrorAction SilentlyContinue) {
   rufix install @flags
   rufix check @flags

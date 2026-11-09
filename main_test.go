@@ -3,26 +3,39 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"rufix/internal/redact"
+	"rufix/internal/secretvalues"
 )
 
 func TestSettingsPathFlags(t *testing.T) {
-	if got := settingsPath([]string{"--path", "/tmp/x.json"}); got != "/tmp/x.json" {
-		t.Errorf("--path: %q", got)
-	}
 	cwd, _ := os.Getwd()
-	want := filepath.Join(cwd, ".claude", "settings.json")
-	if got := settingsPath([]string{"--project"}); got != want {
-		t.Errorf("--project: %q", got)
-	}
 	home, _ := os.UserHomeDir()
-	if got := settingsPath(nil); got != filepath.Join(home, ".claude", "settings.json") {
-		t.Errorf("default: %q", got)
+	cases := []struct {
+		name     string
+		args     []string
+		path     string
+		envFiles bool
+	}{
+		{"path", []string{"--path", filepath.Join(cwd, "x.json")}, filepath.Join(cwd, "x.json"), false},
+		{"project", []string{"--project"}, filepath.Join(cwd, ".claude", "settings.json"), false},
+		{"default", nil, filepath.Join(home, ".claude", "settings.json"), false},
+		{"env files", []string{"--env-files", "--project"}, filepath.Join(cwd, ".claude", "settings.json"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseSettings(tc.args)
+			if err != nil || got.Path != tc.path || got.EnvFiles != tc.envFiles {
+				t.Errorf("settings: path=%q envFiles=%v err=%v", got.Path, got.EnvFiles, err)
+			}
+		})
 	}
 }
 
@@ -98,11 +111,14 @@ func TestCheckCommandOutput(t *testing.T) {
 
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	var out bytes.Buffer
-	if err := runCheck([]string{"--path", settings}, &out); err != nil {
+	if err := runCheck([]string{"--path", settings, "--env-files"}, &out); err != nil {
 		t.Fatalf("check: %v", err)
 	}
+	vars := map[string]string{"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"}
+	secretvalues.Overlay(vars)
+	exact, _, _ := redact.NewWithRules(vars, secretvalues.Rules()).Stats()
 	got := out.String()
-	if !strings.Contains(got, "not installed") || !strings.Contains(got, "protected values: 3") || !strings.Contains(got, "compiled values: 0") {
+	if !strings.Contains(got, "not installed") || !strings.Contains(got, fmt.Sprintf("protected values: %d,", exact)) || !strings.Contains(got, "compiled + env files") {
 		t.Errorf("check output: %q", got)
 	}
 	if strings.Contains(got, "rufix_test_code_secret_number_001") {
@@ -113,7 +129,7 @@ func TestCheckCommandOutput(t *testing.T) {
 	}
 }
 
-func TestCheckMissingSecrets(t *testing.T) {
+func TestCheckCompiledValuesWithoutEnvFiles(t *testing.T) {
 	t.Setenv("RUFIX_ENV_FILE", "")
 	t.Setenv("RUFIX_SECRETS_DIR", "")
 	t.Chdir(t.TempDir()) // walk-up must not see an unrelated .atlassian.env
@@ -121,7 +137,7 @@ func TestCheckMissingSecrets(t *testing.T) {
 	if err := runCheck([]string{"--project"}, &out); err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if !strings.Contains(out.String(), "NOT FOUND") {
+	if !strings.Contains(out.String(), "secrets: compiled (") || !strings.Contains(out.String(), "demo:") || strings.Contains(out.String(), "not found;") {
 		t.Errorf("check output: %q", out.String())
 	}
 }

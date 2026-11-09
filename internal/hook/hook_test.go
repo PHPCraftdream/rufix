@@ -3,8 +3,6 @@ package hook
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,40 +21,22 @@ var testVars = map[string]string{
 
 func runHook(t *testing.T, stdin string, withSecrets bool) (string, string, int) {
 	t.Helper()
-	env := func(string) string { return "" }
+	vars := map[string]string{}
 	if withSecrets {
-		path := filepath.Join(t.TempDir(), "secrets.env")
-		content := "JIRA_TOKEN=" + testToken + "\nJIRA_URL=" + testHost + "\n"
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		env = func(key string) string {
-			if key == "RUFIX_ENV_FILE" {
-				return path
-			}
-			return ""
-		}
+		vars = testVars
 	}
 	var out, errb bytes.Buffer
 	code := Run(Config{
-		Stdin:   strings.NewReader(stdin),
-		Stdout:  &out,
-		Stderr:  &errb,
-		Env:     env,
-		Stat:    statExists,
-		ExeDir:  "",
-		HomeDir: "",
+		Stdin:  strings.NewReader(stdin),
+		Stdout: &out,
+		Stderr: &errb,
+		Vars:   vars,
 		// Deterministic rule set: tests never depend on the local values.go.
 		Rules: []redact.RuleData{
 			{Name: "atlassian-pat", Match: `ATATT[A-Za-z0-9_\-=]{18,}`, Replace: "[REDACTED:atlassian-pat]"},
 		},
 	})
 	return out.String(), errb.String(), code
-}
-
-func statExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 func TestPostToolUseRedactsBashShapeExactly(t *testing.T) {
@@ -67,8 +47,8 @@ func TestPostToolUseRedactsBashShapeExactly(t *testing.T) {
 	}
 	var resp struct {
 		HookSpecificOutput struct {
-			HookEventName      string `json:"hookEventName"`
-			UpdatedToolOutput  *struct {
+			HookEventName     string `json:"hookEventName"`
+			UpdatedToolOutput *struct {
 				Stdout      string `json:"stdout"`
 				Stderr      string `json:"stderr"`
 				Interrupted bool   `json:"interrupted"`
@@ -156,13 +136,13 @@ func TestPreToolUseIgnoresOtherTools(t *testing.T) {
 	}
 }
 
-func TestDegradedModeRulesOnly(t *testing.T) {
+func TestRulesOnlyWithoutEnvFiles(t *testing.T) {
 	in := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"stdout":"token ATATT3abcdefgHIJKLMNOPQRSTUVWX"}}`
 	out, stderr, code := runHook(t, in, false)
 	if code != 0 {
 		t.Fatalf("code=%d", code)
 	}
-	if !strings.Contains(out, "[REDACTED:atlassian-pat]") || !strings.Contains(stderr, "compiled values") {
+	if !strings.Contains(out, "[REDACTED:atlassian-pat]") || strings.Contains(stderr, "secrets file") {
 		t.Errorf("out=%q stderr=%q", out, stderr)
 	}
 }

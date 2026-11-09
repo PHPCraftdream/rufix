@@ -12,8 +12,9 @@ import (
 
 // Options locates the settings file and the rufix executable.
 type Options struct {
-	Path   string // settings.json path
-	ExeDir string // dir of the rufix executable; empty → executable is on PATH
+	Path     string // settings.json path
+	ExeDir   string // dir of the rufix executable; empty → executable is on PATH
+	EnvFiles bool
 }
 
 const marker = "rufix" // uninstall/idempotency marker inside the hook command
@@ -33,10 +34,14 @@ func defaultEntries() []Entry {
 }
 
 func command(opts Options) string {
-	if opts.ExeDir == "" {
-		return "rufix hook"
+	cmd := "rufix hook"
+	if opts.ExeDir != "" {
+		cmd = fmt.Sprintf("%q hook", filepath.ToSlash(filepath.Join(opts.ExeDir, "rufix")))
 	}
-	return fmt.Sprintf("%q hook", filepath.ToSlash(filepath.Join(opts.ExeDir, "rufix")))
+	if opts.EnvFiles {
+		cmd += " --env-files"
+	}
+	return cmd
 }
 
 // Install fully reinstalls rufix hook entries: every existing rufix entry is

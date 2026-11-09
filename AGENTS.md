@@ -7,6 +7,15 @@ installer is built into the same binary (`rufix install`).
 
 This is a security tool. Treat every weakening of the defaults as a bug.
 
+Hooks use compiled values and rules only by default. External env-file
+resolution is opt-in via `rufix hook --env-files`; `rufix install --env-files`
+persists that flag in both hook commands. Keep `check` consistent with this
+source selection. Production hooks load generated regex programs only:
+missing/stale programs fail closed, without runtime compilation. Both regex
+directions are compiled during `go generate ./internal/secretvalues`.
+The private `internal/compiledregexp/filters_generated.go` is gitignored and
+must never be committed. Keep the Go authors' BSD license on the pinned matcher.
+
 ## Layout
 
 ```
@@ -14,7 +23,9 @@ main.go                      CLI: hook | install | uninstall | status | check | 
 install.sh                   setup script (sh): build + go install . + rufix install; --revert uninstalls
 install.ps1                  setup script (PowerShell): same, flags -Project / -Revert
 install.cmd                  cmd.exe wrapper over install.ps1: remaps --project/--revert to switches
-internal/envfile/            KEY=VALUE parsing + secrets-file resolution order
+internal/cmd/compilefilters/ build-time regex program generator
+internal/compiledregexp/     pinned Go matcher + gitignored private generated programs
+internal/envfile/            opt-in KEY=VALUE parsing + secrets-file resolution order
 internal/redact/             replacement core: exact-value map + format rules
 internal/hook/               Claude Code hook contracts (stdin JSON in/out)
 internal/install/            settings.json merge/uninstall (idempotent)
@@ -28,6 +39,7 @@ real action goes through the CLI subcommands, the scripts only chain them.
 ## Commands
 
 ```bash
+go generate ./internal/secretvalues  compile private regex programs before building
 go build ./...               compile check
 go vet ./...                 static analysis
 go test ./...                full test suite
@@ -36,7 +48,7 @@ go install .                 install globally to $GOPATH/bin
 ```
 
 Run build + vet + test after every change. Tests must pass on Windows and
-Linux: `internal/hook` and `internal/envfile` tests run real files via
+Linux: opt-in env-file tests run real files via
 `t.TempDir()`, and path expectations must be built with `filepath.Join` /
 `filepath.FromSlash`, never hand-written `/`-separated literals (they break on
 Windows, where `filepath.Dir`/`Join` use `\`).
