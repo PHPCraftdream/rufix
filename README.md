@@ -267,3 +267,7 @@ at your option.
 
 The bundled Go `regexp` matcher retains the Go authors' BSD license; see
 [internal/compiledregexp/LICENSE](internal/compiledregexp/LICENSE).
+
+CI checks dependency licenses against an explicit allowlist and verifies the
+bundled source notices. See [the license policy](docs/licensing.md) for the
+checks, review obligations, and automation limits.

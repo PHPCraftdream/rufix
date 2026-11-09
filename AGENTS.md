@@ -126,6 +126,14 @@ file, and `TestStubIsEmpty` passes.
 - `.gitignore` covers the binary and the `secrets/` folder; both must never
   appear in `git status` output.
 
+## Licensing
+
+The `licenses` CI job checks Linux/Windows dependency graphs with pinned
+`go-licenses`, including test imports. `legal_test.go` guards reviewed license
+texts and copied-source notices. Treat allowlist/digest/inventory changes as
+explicit licensing review, not routine test updates. Never remove original
+third-party notices. See `docs/licensing.md` for policy and limitations.
+
 ## CI
 
 `.github/workflows/ci.yml` runs build + vet + test on ubuntu and windows for

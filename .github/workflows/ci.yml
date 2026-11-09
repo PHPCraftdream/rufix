@@ -20,3 +20,27 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+
+  licenses:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      LICENSE_ALLOWLIST: MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check license documents and third-party notices
+        run: go test . -run '^TestLicense'
+      - name: Install pinned dependency license scanner
+        run: go install github.com/google/go-licenses/v2@v2.0.1
+      - name: Check Linux dependency licenses
+        env:
+          GOOS: linux
+        run: go-licenses check ./... --include_tests --allowed_licenses="$LICENSE_ALLOWLIST"
+      - name: Check Windows dependency licenses
+        env:
+          GOOS: windows
+        run: go-licenses check ./... --include_tests --allowed_licenses="$LICENSE_ALLOWLIST"
