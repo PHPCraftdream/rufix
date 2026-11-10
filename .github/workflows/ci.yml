@@ -20,6 +20,19 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+      - name: Build compact release binary
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p secrets/release
+          binary="secrets/release/rufix$(go env GOEXE)"
+          go build -trimpath -ldflags='-s -w -buildid=' -o "$binary" .
+          echo "RUFIX_RELEASE_BINARY=$binary" >> "$GITHUB_ENV"
+      - name: Check release size and hook behavior
+        env:
+          CGO_ENABLED: "0"
+        run: go test . -run '^TestReleaseBinarySmoke$' -count=1 -v
 
   licenses:
     runs-on: ubuntu-latest

@@ -74,6 +74,14 @@ One command does everything (build → global binary → hooks → verification)
 install.cmd               # Windows cmd.exe — runs install.ps1, remaps --flags to -Switches
 ```
 
+The Windows installer (`install.cmd` / `install.ps1`) generates regex programs,
+then builds and installs the application once with `CGO_ENABLED=0`, `-trimpath`
+and `-ldflags="-s -w -buildid="`. Standard Go compiler optimizations remain
+enabled; debug symbols and DWARF data are omitted. No UPX or startup
+self-decompression is used, and no separate Go runtime needs to be installed.
+These settings reduce executable size; they do not guarantee lower startup
+latency. The script restores the caller's `CGO_ENABLED` value afterwards.
+
 Flags:
 
 ```
@@ -242,7 +250,16 @@ go generate ./internal/secretvalues && go build ./... && go vet ./... && go test
 
 See [AGENTS.md](AGENTS.md) for architecture notes, invariants and
 conventions. CI (`.github/workflows/ci.yml`) runs build, vet and tests on
-Ubuntu and Windows. Commits follow Conventional Commits with an emoji prefix
+Ubuntu and Windows. Windows tests exercise a temporary copy of the installer
+with mocked commands, checking failure propagation and environment restoration
+without installing real hooks. CI also builds the compact release configuration
+on both systems and smoke-checks the version, valid/invalid hook input, and a
+4 MiB executable-size budget for the empty committed configuration. Per-process
+wall times are logged for diagnostics, not enforced as a speed benchmark on
+shared runners. Release smoke tests skip unless `RUFIX_RELEASE_BINARY` names
+the binary to check.
+
+Commits follow Conventional Commits with an emoji prefix
 (`✨ feat: …`, `🐛 fix: …`, `📝 docs: …`).
 
 Only test fixtures are committed: long harmless phrases like

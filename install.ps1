@@ -26,15 +26,21 @@ if ($Revert) {
   exit 0
 }
 
-go generate ./internal/secretvalues
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-go build ./...
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-go install .
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$previousCGOEnabled = $env:CGO_ENABLED
+try {
+  $env:CGO_ENABLED = "0"
+  go generate ./internal/secretvalues
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  go install -trimpath -ldflags "-s -w -buildid=" .
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+  $env:CGO_ENABLED = $previousCGOEnabled
+}
 if (Get-Command rufix -ErrorAction SilentlyContinue) {
   rufix install @flags
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   rufix check @flags
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
   Write-Error "rufix was built into $(go env GOPATH)\bin but is not on PATH; add it and run: rufix install"
 }
