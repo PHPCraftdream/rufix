@@ -1,0 +1,450 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#regexjson",
+  "cases": [
+    {
+      "pattern": "a",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 1]], [[0, 1], [1, 2], [2, 3]], [], [], [[0, 1]], [[8, 9]], [], [[1, 2]], [], [[0, 1]], [[2, 3]], [], [[1, 2], [7, 8]], [], [[0, 1]], [], [], []]
+    },
+    {
+      "pattern": "abc",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 3]], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+    },
+    {
+      "pattern": "a|ab",
+      "inputs": ["ab", "abab"],
+      "valid": true,
+      "matches": [[[0, 1]], [[0, 1], [2, 3]]]
+    },
+    {
+      "pattern": "ab|a",
+      "inputs": ["ab", "abab"],
+      "valid": true,
+      "matches": [[[0, 2]], [[0, 2], [2, 4]]]
+    },
+    {
+      "pattern": "a|",
+      "inputs": ["a", "b", ""],
+      "valid": true,
+      "matches": [[[0, 1]], [[0, 0], [1, 1]], [[0, 0]]]
+    },
+    {
+      "pattern": "|a",
+      "inputs": ["a", ""],
+      "valid": true,
+      "matches": [[[0, 0], [1, 1]], [[0, 0]]]
+    },
+    {
+      "pattern": "(a|b)(c|d)",
+      "inputs": ["ac", "bd", "ad bc"],
+      "valid": true,
+      "matches": [[[0, 2, 0, 1, 1, 2]], [[0, 2, 0, 1, 1, 2]], [[0, 2, 0, 1, 1, 2], [3, 5, 3, 4, 4, 5]]]
+    },
+    {
+      "pattern": "a*",
+      "inputs": ["", "aaa", "baaab"],
+      "valid": true,
+      "matches": [[[0, 0]], [[0, 3]], [[0, 0], [1, 4], [5, 5]]]
+    },
+    {
+      "pattern": "a+",
+      "inputs": ["aaa", "b"],
+      "valid": true,
+      "matches": [[[0, 3]], []]
+    },
+    {
+      "pattern": "a?",
+      "inputs": ["a", "b"],
+      "valid": true,
+      "matches": [[[0, 1]], [[0, 0], [1, 1]]]
+    },
+    {
+      "pattern": "a*?",
+      "inputs": ["aaa"],
+      "valid": true,
+      "matches": [[[0, 0], [1, 1], [2, 2], [3, 3]]]
+    },
+    {
+      "pattern": "a+?",
+      "inputs": ["aaa"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2], [2, 3]]]
+    },
+    {
+      "pattern": "a??",
+      "inputs": ["a"],
+      "valid": true,
+      "matches": [[[0, 0], [1, 1]]]
+    },
+    {
+      "pattern": "a{2}",
+      "inputs": ["aaaaa"],
+      "valid": true,
+      "matches": [[[0, 2], [2, 4]]]
+    },
+    {
+      "pattern": "a{2,}",
+      "inputs": ["aaaaa"],
+      "valid": true,
+      "matches": [[[0, 5]]]
+    },
+    {
+      "pattern": "a{2,3}",
+      "inputs": ["aaaaaaa"],
+      "valid": true,
+      "matches": [[[0, 3], [3, 6]]]
+    },
+    {
+      "pattern": "a{2,3}?",
+      "inputs": ["aaaaaaa"],
+      "valid": true,
+      "matches": [[[0, 2], [2, 4], [4, 6]]]
+    },
+    {
+      "pattern": "a{0}",
+      "inputs": ["aaa"],
+      "valid": true,
+      "matches": [[[0, 0], [1, 1], [2, 2], [3, 3]]]
+    },
+    {
+      "pattern": "a{0,0}b",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[1, 2]]]
+    },
+    {
+      "pattern": "(a*)*",
+      "inputs": ["b", "aab"],
+      "valid": true,
+      "matches": [[[0, 0, 0, 0], [1, 1, 1, 1]], [[0, 2, 0, 2], [3, 3, 3, 3]]]
+    },
+    {
+      "pattern": "(a*)+",
+      "inputs": ["b", "aab"],
+      "valid": true,
+      "matches": [[[0, 0, 0, 0], [1, 1, 1, 1]], [[0, 2, 0, 2], [3, 3, 3, 3]]]
+    },
+    {
+      "pattern": "(a|b)*c",
+      "inputs": ["ababc ac c"],
+      "valid": true,
+      "matches": [[[0, 5, 3, 4], [6, 8, 6, 7], [9, 10, -1, -1]]]
+    },
+    {
+      "pattern": "(a+|b)*",
+      "inputs": ["ab", "bba"],
+      "valid": true,
+      "matches": [[[0, 2, 1, 2]], [[0, 3, 2, 3]]]
+    },
+    {
+      "pattern": "(ab)*?c",
+      "inputs": ["ababc"],
+      "valid": true,
+      "matches": [[[0, 5, 2, 4]]]
+    },
+    {
+      "pattern": "x{1,1000}",
+      "inputs": ["xx"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "a{,3}",
+      "inputs": ["a{,3}"],
+      "valid": true,
+      "matches": [[[0, 5]]]
+    },
+    {
+      "pattern": "a{2",
+      "inputs": ["a{2"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "a{x}",
+      "inputs": ["a{x}"],
+      "valid": true,
+      "matches": [[[0, 4]]]
+    },
+    {
+      "pattern": "[abc]",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 1], [1, 2], [2, 3]], [[0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 7]], [], [], [[0, 1], [2, 3], [4, 5]], [[7, 8], [8, 9]], [], [[0, 1], [1, 2]], [], [[0, 1], [2, 3], [4, 5]], [[2, 3]], [], [[1, 2], [2, 3], [7, 8], [8, 9]], [], [[0, 1], [2, 3], [4, 5]], [[1, 2]], [], []]
+    },
+    {
+      "pattern": "[^abc]",
+      "inputs": ["abcd\n"],
+      "valid": true,
+      "matches": [[[3, 4], [4, 5]]]
+    },
+    {
+      "pattern": "[a-c]+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 3]], [[0, 3], [4, 7]], [], [], [[0, 1], [2, 3], [4, 5]], [[7, 9]], [], [[0, 2]], [], [[0, 1], [2, 3], [4, 5]], [[2, 3]], [], [[1, 3], [7, 9]], [], [[0, 1], [2, 3], [4, 5]], [[1, 2]], [], []]
+    },
+    {
+      "pattern": "[]a]",
+      "inputs": ["]a"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2]]]
+    },
+    {
+      "pattern": "[^]a]",
+      "inputs": ["]ab"],
+      "valid": true,
+      "matches": [[[2, 3]]]
+    },
+    {
+      "pattern": "[-a]",
+      "inputs": ["-a"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2]]]
+    },
+    {
+      "pattern": "[a-]",
+      "inputs": ["-a"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2]]]
+    },
+    {
+      "pattern": "[\\]\\\\]",
+      "inputs": ["]\\"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2]]]
+    },
+    {
+      "pattern": "[\\d\\s]+",
+      "inputs": ["1 2\t3"],
+      "valid": true,
+      "matches": [[[0, 5]]]
+    },
+    {
+      "pattern": "[\\D]",
+      "inputs": ["a1"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    },
+    {
+      "pattern": "[[:alpha:]]+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 3]], [[0, 3], [4, 7]], [[0, 5], [6, 11]], [[0, 1], [2, 3], [4, 5], [6, 7]], [[0, 1], [2, 3], [4, 5]], [[0, 3], [7, 10]], [], [[0, 3], [6, 10]], [[3, 8], [11, 12]], [[0, 5]], [[2, 3]], [[1, 2], [4, 5]], [[0, 3], [4, 6], [7, 10]], [], [[0, 1], [2, 3], [4, 5]], [[0, 6]], [[0, 3]], [[0, 12]]]
+    },
+    {
+      "pattern": "[[:^digit:]]+",
+      "inputs": ["ab12cd"],
+      "valid": true,
+      "matches": [[[0, 2], [4, 6]]]
+    },
+    {
+      "pattern": "[[:punct:][:space:]]+",
+      "inputs": ["a, b!"],
+      "valid": true,
+      "matches": [[[1, 3], [4, 5]]]
+    },
+    {
+      "pattern": "[\\x41-\\x43]+",
+      "inputs": ["ABCD"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "[а-я]+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [], [], [], [], [], [[0, 12]], [], [], [], [], [], [], [], [], [], [], []]
+    },
+    {
+      "pattern": "\\d+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [], [], [], [], [[3, 6], [10, 12]], [], [], [], [], [], [], [], [], [[1, 2], [3, 4], [5, 6]], [], [], []]
+    },
+    {
+      "pattern": "\\D+",
+      "inputs": ["ab12"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "\\w+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 3]], [[0, 3], [4, 7]], [[0, 5], [6, 11]], [[0, 1], [2, 3], [4, 7]], [[0, 1], [2, 3], [4, 5]], [[0, 6], [7, 12]], [], [[0, 3], [6, 10]], [[3, 8], [11, 12]], [[0, 5]], [[2, 3]], [[1, 2], [4, 5]], [[0, 3], [4, 6], [7, 10]], [], [[0, 6]], [[0, 6]], [[0, 3]], [[0, 12]]]
+    },
+    {
+      "pattern": "\\W+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [[3, 4]], [[5, 6]], [[1, 2], [3, 4]], [[1, 2], [3, 4]], [[6, 7]], [[0, 19]], [[3, 6]], [[0, 3], [8, 11]], [], [[0, 2], [3, 5]], [[0, 1], [2, 4], [5, 6]], [[3, 4], [6, 7]], [[0, 9]], [], [], [[3, 4]], []]
+    },
+    {
+      "pattern": "\\s+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [[3, 4]], [[5, 6]], [], [[1, 2], [3, 4]], [[6, 7]], [[12, 13]], [[5, 6]], [[8, 9]], [], [], [], [[3, 4], [6, 7]], [], [], [], [], []]
+    },
+    {
+      "pattern": "\\S+",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [[0, 3]], [[0, 3], [4, 7]], [[0, 5], [6, 11]], [[0, 7]], [[0, 1], [2, 3], [4, 5]], [[0, 6], [7, 12]], [[0, 12], [13, 19]], [[0, 5], [6, 10]], [[0, 8], [9, 12]], [[0, 5]], [[0, 5]], [[0, 6]], [[0, 3], [4, 6], [7, 10]], [[0, 9]], [[0, 6]], [[0, 6]], [[0, 4]], [[0, 12]]]
+    },
+    {
+      "pattern": ".",
+      "inputs": ["a\nb", "é"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 3]], [[0, 2]]]
+    },
+    {
+      "pattern": "(?s).",
+      "inputs": ["a\nb"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2], [2, 3]]]
+    },
+    {
+      "pattern": ".+",
+      "inputs": ["a\nbc"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 4]]]
+    },
+    {
+      "pattern": "^a",
+      "inputs": ["ab", "ba", "a\na"],
+      "valid": true,
+      "matches": [[[0, 1]], [], [[0, 1]]]
+    },
+    {
+      "pattern": "a$",
+      "inputs": ["ba", "ab", "a\na"],
+      "valid": true,
+      "matches": [[[1, 2]], [], [[2, 3]]]
+    },
+    {
+      "pattern": "(?m)^a",
+      "inputs": ["a\na"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 3]]]
+    },
+    {
+      "pattern": "(?m)a$",
+      "inputs": ["a\na\n"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 3]]]
+    },
+    {
+      "pattern": "(?m)^$",
+      "inputs": ["\n\n", ""],
+      "valid": true,
+      "matches": [[[0, 0], [1, 1], [2, 2]], [[0, 0]]]
+    },
+    {
+      "pattern": "\\Aa",
+      "inputs": ["aa"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    },
+    {
+      "pattern": "a\\z",
+      "inputs": ["aa"],
+      "valid": true,
+      "matches": [[[1, 2]]]
+    },
+    {
+      "pattern": "^",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[0, 0]]]
+    },
+    {
+      "pattern": "$",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[2, 2]]]
+    },
+    {
+      "pattern": "^$",
+      "inputs": ["", "a"],
+      "valid": true,
+      "matches": [[[0, 0]], []]
+    },
+    {
+      "pattern": "\\bfoo\\b",
+      "inputs": ["foo foobar barfoo (foo)"],
+      "valid": true,
+      "matches": [[[0, 3], [19, 22]]]
+    },
+    {
+      "pattern": "\\Boo\\B",
+      "inputs": ["foo xooy"],
+      "valid": true,
+      "matches": [[[5, 7]]]
+    },
+    {
+      "pattern": "\\b",
+      "inputs": ["ab cd"],
+      "valid": true,
+      "matches": [[[0, 0], [2, 2], [3, 3], [5, 5]]]
+    },
+    {
+      "pattern": "\\B",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[1, 1]]]
+    },
+    {
+      "pattern": "\\.",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [], [], [[1, 2]], [], [], [], [], [], [], [], [], [], [], [], [], [[3, 4]], []]
+    },
+    {
+      "pattern": "\\x41",
+      "inputs": ["ABC"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    },
+    {
+      "pattern": "\\x{263a}",
+      "inputs": ["☺"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "\\101",
+      "inputs": ["A"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    },
+    {
+      "pattern": "\\0",
+      "inputs": ["\u0000"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    },
+    {
+      "pattern": "\\t",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [], [], [], [], [], [], [], [], [], [], [], [[3, 4]], [], [], [], [], []]
+    },
+    {
+      "pattern": "\\Qa.b\\E",
+      "inputs": ["a.b axb"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "\\Qa.b",
+      "inputs": ["a.b"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    }
+  ]
+}

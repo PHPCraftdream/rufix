@@ -10,3 +10,7 @@ secrets/
 internal/compiledregexp/filters_generated.go
 internal/compiledregexp/fixtures_generated_test.go
 internal/compiledregexp/.filters-*.tmp
+
+# Zig build output
+.zig-cache/
+zig-out/

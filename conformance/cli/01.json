@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#clijson",
+  "cases": [
+    {
+      "name": "version",
+      "args": ["version"],
+      "exit": 0,
+      "stdout": "rufix 0.1.0\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "version flag",
+      "args": ["--version"],
+      "exit": 0,
+      "stdout": "rufix 0.1.0\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "no args",
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "unknown command",
+      "args": ["bogus"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook unknown flag",
+      "args": ["hook", "--unknown"],
+      "stdin": "{}",
+      "exit": 2,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook bad bool",
+      "args": ["hook", "--env-files=invalid"],
+      "stdin": "{}",
+      "exit": 2,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook extra arg",
+      "args": ["hook", "extra"],
+      "stdin": "{}",
+      "exit": 2,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook bool false",
+      "args": ["hook", "--env-files=false"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Read\",\"tool_response\":{\"text\":\"neutral fixture\",\"n\":[true,null,12345678901234567890]}}",
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "hook neutral",
+      "args": ["hook"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Read\",\"tool_response\":{\"text\":\"neutral fixture\",\"n\":[true,null,12345678901234567890]}}",
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "hook invalid json",
+      "args": ["hook"],
+      "stdin": "{",
+      "exit": 2,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook env files redact",
+      "args": ["hook", "--env-files"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"{tmp}/work\",\"tool_response\":{\"stdout\":\"Bearer rufix_test_code_secret_number_001 at https://jira.internal.example:8443/x\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false}}",
+      "env": {"RUFIX_ENV_FILE": "{tmp}/secrets.env"},
+      "files": {"secrets.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n"},
+      "exit": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedToolOutput\":{\"interrupted\":false,\"isImage\":false,\"stderr\":\"\",\"stdout\":\"Bearer [S:173410ad] at [S:5775a794]/x\"}}}\n",
+      "stderr": "rufix: redacted 2 occurrence(s) in Bash\n",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook env files restore",
+      "args": ["hook", "-env-files"],
+      "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"{tmp}/work\",\"tool_input\":{\"command\":\"curl [S:5775a794]/rest -H 'Bearer [S:173410ad]'\"}}",
+      "env": {"RUFIX_ENV_FILE": "{tmp}/secrets.env"},
+      "files": {"secrets.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n"},
+      "exit": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"command\":\"curl https://jira.internal.example:8443/rest -H 'Bearer rufix_test_code_secret_number_001'\"}}}\n",
+      "stderr": "rufix: restored 2 placeholder(s) in Bash\n",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook env files from atlassian walk",
+      "args": ["hook", "--env-files"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"{tmp}/work\",\"tool_response\":{\"stdout\":\"Bearer rufix_test_code_secret_number_001 at https://jira.internal.example:8443/x\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false}}",
+      "files": {"work/.atlassian.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n"},
+      "exit": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedToolOutput\":{\"interrupted\":false,\"isImage\":false,\"stderr\":\"\",\"stdout\":\"Bearer [S:173410ad] at [S:5775a794]/x\"}}}\n",
+      "stderr": "rufix: redacted 2 occurrence(s) in Bash\n",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook env files dir",
+      "args": ["hook", "--env-files"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"{tmp}/work\",\"tool_response\":{\"stdout\":\"Bearer rufix_test_code_secret_number_001 at https://jira.internal.example:8443/x\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false}}",
+      "env": {"RUFIX_SECRETS_DIR": "{tmp}/dir"},
+      "files": {"dir/a.env": "JIRA_TOKEN=rufix_test_other_value_0001\n", "dir/b.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n", "dir/c.txt": "IGNORED_TOKEN=rufix_test_ignored_0002\n"},
+      "exit": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedToolOutput\":{\"interrupted\":false,\"isImage\":false,\"stderr\":\"\",\"stdout\":\"Bearer rufix_test_code_secret_number_001 at [S:5775a794]/x\"}}}\n",
+      "stderr": "rufix: redacted 1 occurrence(s) in Bash\n",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "hook env files missing",
+      "args": ["hook", "--env-files"],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Read\",\"tool_response\":{\"text\":\"neutral fixture\",\"n\":[true,null,12345678901234567890]}}",
+      "exit": 0,
+      "stdout": "",
+      "stderr": "rufix: secrets file not found; using compiled values with format rules\n",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "install default",
+      "args": ["install"],
+      "exit": 0,
+      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}\\home\\.claude\\settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"home/.claude/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+    },
+    {
+      "name": "install project env files",
+      "args": ["install", "--project", "--env-files"],
+      "exit": 0,
+      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}\\work\\.claude\\settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"work/.claude/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook --env-files\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook --env-files\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+    },
+    {
+      "name": "install explicit path",
+      "args": ["install", "--path", "{tmp}/deep/dir/settings.json"],
+      "exit": 0,
+      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}/deep/dir/settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"deep/dir/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+    },
+    {
+      "name": "install path equals",
+      "args": ["install", "--path={tmp}/s.json"],
+      "exit": 0,
+      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}/s.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"s.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+    },
+    {
+      "name": "install bad flag",
+      "args": ["install", "--nope"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "install extra arg",
+      "args": ["install", "x"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "install invalid settings",
+      "args": ["install", "--path", "{tmp}/bad.json"],
+      "files": {"bad.json": "{"},
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "status empty",
+      "args": ["status"],
+      "exit": 0,
+      "stdout": "rufix status: not installed (no hooks section)\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "status after manual",
+      "args": ["status", "--path", "{tmp}/s.json"],
+      "files": {"s.json": "{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\",\"timeout\":10}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix status: stale: PostToolUse missing, PreToolUse matcher outdated, PreToolUse not fail-closed, PreToolUse runs another binary; re-run rufix install\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "uninstall",
+      "args": ["uninstall", "--path", "{tmp}/s.json"],
+      "files": {"s.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix uninstall: removed 1 hook entr(y/ies) from {tmp}/s.json\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "check",
+      "args": ["check"],
+      "exit": 0,
+      "stdout": "settings: {tmp}\\home\\.claude\\settings.json (not installed (no hooks section))\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "check env files",
+      "args": ["check", "--env-files", "--project"],
+      "env": {"RUFIX_ENV_FILE": "{tmp}/secrets.env"},
+      "files": {"secrets.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n"},
+      "exit": 0,
+      "stdout": "settings: {tmp}\\work\\.claude\\settings.json (not installed (no hooks section))\nsecrets: compiled + env files (variables: 3, protected values: 5, protected hosts: 3, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "check env files missing",
+      "args": ["check", "--env-files"],
+      "exit": 0,
+      "stdout": "settings: {tmp}\\home\\.claude\\settings.json (not installed (no hooks section))\nenv files: not found; using compiled values with format rules\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    }
+  ]
+}

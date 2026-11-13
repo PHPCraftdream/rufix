@@ -1,0 +1,292 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#regexjson",
+  "cases": [
+    {
+      "pattern": "\\*\\+\\?",
+      "inputs": ["*+?"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "\\{\\}",
+      "inputs": ["{}"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "(?i)abc",
+      "inputs": ["ABC aBc"],
+      "valid": true,
+      "matches": [[[0, 3], [4, 7]]]
+    },
+    {
+      "pattern": "(?i:ab)c",
+      "inputs": ["ABc ABC"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "a(?i)b",
+      "inputs": ["aB AB"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "(?i)a(?-i)b",
+      "inputs": ["Ab AB"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "(?U)a+",
+      "inputs": ["aaa"],
+      "valid": true,
+      "matches": [[[0, 1], [1, 2], [2, 3]]]
+    },
+    {
+      "pattern": "(?U)a+?",
+      "inputs": ["aaa"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "(?i)[a-c]",
+      "inputs": ["B b"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 3]]]
+    },
+    {
+      "pattern": "(?i)[^a]",
+      "inputs": ["A b"],
+      "valid": true,
+      "matches": [[[1, 2], [2, 3]]]
+    },
+    {
+      "pattern": "(?i)при",
+      "inputs": ["ПРИ"],
+      "valid": true,
+      "matches": [[[0, 6]]]
+    },
+    {
+      "pattern": "(?i)σ",
+      "inputs": ["Σςσ"],
+      "valid": true,
+      "matches": [[[0, 2], [2, 4], [4, 6]]]
+    },
+    {
+      "pattern": "(?i)k",
+      "inputs": ["k K K"],
+      "valid": true,
+      "matches": [[[0, 1], [2, 3], [4, 7]]]
+    },
+    {
+      "pattern": "(?i)s",
+      "inputs": ["ſ S"],
+      "valid": true,
+      "matches": [[[0, 2], [3, 4]]]
+    },
+    {
+      "pattern": "(?i)\\w+",
+      "inputs": ["Kſ"],
+      "valid": true,
+      "matches": [[[0, 5]]]
+    },
+    {
+      "pattern": "(?i)[k]",
+      "inputs": ["K"],
+      "valid": true,
+      "matches": [[[0, 3]]]
+    },
+    {
+      "pattern": "(?i)é",
+      "inputs": ["É"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "(?i)[Ѐ-Џ]",
+      "inputs": ["ѐ"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "(?im)^A",
+      "inputs": ["x\na"],
+      "valid": true,
+      "matches": [[[2, 3]]]
+    },
+    {
+      "pattern": "(a)(b)?",
+      "inputs": ["a", "ab"],
+      "valid": true,
+      "matches": [[[0, 1, 0, 1, -1, -1]], [[0, 2, 0, 1, 1, 2]]]
+    },
+    {
+      "pattern": "(?:a)(b)",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[0, 2, 1, 2]]]
+    },
+    {
+      "pattern": "(?P<x>a)(?<y>b)",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[0, 2, 0, 1, 1, 2]]]
+    },
+    {
+      "pattern": "((a)|(b))+",
+      "inputs": ["ab"],
+      "valid": true,
+      "matches": [[[0, 2, 1, 2, 0, 1, 1, 2]]]
+    },
+    {
+      "pattern": "(a)|(b)",
+      "inputs": ["b"],
+      "valid": true,
+      "matches": [[[0, 1, -1, -1, 0, 1]]]
+    },
+    {
+      "pattern": "日",
+      "inputs": ["", "abc", "aaa bbb", "Hello World", "x.y-z_w", "a\nb\nc", "foo123 bar45", "привет МИР", "café CAFE", "Kelvin ſs", "aXbXc", "((a))", "[x]{y}", "tab\tsp ace", "日本語", "a1b2c3", "AbCdEf", "end.", "xxxxxxxxxxxx"],
+      "valid": true,
+      "matches": [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [[0, 3]], [], [], [], []]
+    },
+    {
+      "pattern": "日+",
+      "inputs": ["日日"],
+      "valid": true,
+      "matches": [[[0, 6]]]
+    },
+    {
+      "pattern": "[^a]",
+      "inputs": ["é"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "a**",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "a*+",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "(",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": ")",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "[a",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "[z-a]",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "x{1001}",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "x{2,1}",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "\\1",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "(?P<n>a)(?P<n>b)",
+      "inputs": ["a"],
+      "valid": true,
+      "matches": [[]]
+    },
+    {
+      "pattern": "(?z)",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "*",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "\\q",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "(?P<>a)",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "[[:foo:]]",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "\\x{110000}",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "(?i",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "a{1001,}",
+      "inputs": ["a"],
+      "valid": false,
+      "matches": []
+    },
+    {
+      "pattern": "\\p{Greek}",
+      "note": "Unicode classes need tables; a port may reject the pattern instead.",
+      "may_reject": true,
+      "inputs": ["α"],
+      "valid": true,
+      "matches": [[[0, 2]]]
+    },
+    {
+      "pattern": "\\pL",
+      "note": "Unicode classes need tables; a port may reject the pattern instead.",
+      "may_reject": true,
+      "inputs": ["a"],
+      "valid": true,
+      "matches": [[[0, 1]]]
+    }
+  ]
+}

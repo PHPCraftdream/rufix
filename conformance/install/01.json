@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#installjson",
+  "cases": [
+    {
+      "name": "fresh install, status and uninstall",
+      "initial": null,
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed (no hooks section)", "settings": null},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "installed: PostToolUse, PreToolUse", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "reinstalled 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "removed 2 hook entr(y/ies) from {path}", "settings": {}},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed (no hooks section)", "settings": {}}
+      ]
+    },
+    {
+      "name": "foreign settings and hooks survive install and uninstall",
+      "initial": {"model": "opus", "permissions": {"allow": ["Bash(go vet:*)"]}, "hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "node \"C:/x/cah-stamp.js\""}]}], "Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}, "big": 12345678901234567890, "price": 1.5, "text": "ü 🙂 <tag> & more"},
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"big": 12345678901234567890, "hooks": {"PostToolUse": [{"hooks": [{"command": "node \"C:/x/cah-stamp.js\"", "type": "command"}], "matcher": ""}, {"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}], "Stop": [{"hooks": [{"command": "notify", "type": "command"}]}]}, "model": "opus", "permissions": {"allow": ["Bash(go vet:*)"]}, "price": 1.5, "text": "ü 🙂 <tag> & more"}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "removed 2 hook entr(y/ies) from {path}", "settings": {"big": 12345678901234567890, "hooks": {"PostToolUse": [{"hooks": [{"command": "node \"C:/x/cah-stamp.js\"", "type": "command"}], "matcher": ""}], "Stop": [{"hooks": [{"command": "notify", "type": "command"}]}]}, "model": "opus", "permissions": {"allow": ["Bash(go vet:*)"]}, "price": 1.5, "text": "ü 🙂 <tag> & more"}}
+      ]
+    },
+    {
+      "name": "stale entries are reported and replaced",
+      "initial": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "\"C:/old/place/rufix\" hook", "timeout": 5}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"C:/old/place/rufix\" hook", "timeout": 5}]}]}},
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "stale: PostToolUse timeout outdated, PostToolUse not fail-closed, PostToolUse runs another binary, PreToolUse matcher outdated, PreToolUse timeout outdated, PreToolUse not fail-closed, PreToolUse runs another binary; re-run rufix install", "settings": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "\"C:/old/place/rufix\" hook", "timeout": 5}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"C:/old/place/rufix\" hook", "timeout": 5}]}]}}},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "reinstalled 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "installed: PostToolUse, PreToolUse", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "env files flag is kept in both commands",
+      "initial": null,
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools", "env_files": true}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "installed: PostToolUse, PreToolUse", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": "/elsewhere"}, "summary": "stale: PostToolUse runs another binary, PreToolUse runs another binary; re-run rufix install", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook --env-files", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "duplicates and a missing event are stale",
+      "initial": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "\"/tools/rufix\" hook", "timeout": 30, "onFailure": "block"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"/tools/rufix\" hook", "timeout": 30, "onFailure": "block"}]}]}},
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "stale: PostToolUse duplicated, PreToolUse missing; re-run rufix install", "settings": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "\"/tools/rufix\" hook", "timeout": 30, "onFailure": "block"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"/tools/rufix\" hook", "timeout": 30, "onFailure": "block"}]}]}}},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "reinstalled 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "uninstall without rufix entries leaves the file alone",
+      "initial": {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}, "model": "opus"},
+      "steps": [
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "no rufix entries found", "settings": {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}, "model": "opus"}},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed", "settings": {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}, "model": "opus"}}
+      ]
+    },
+    {
+      "name": "empty object file",
+      "initial": {},
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed (no hooks section)", "settings": {}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "no hooks section", "settings": {}}
+      ]
+    },
+    {
+      "name": "edge: invalid json settings fail and stay untouched",
+      "initial": null,
+      "initial_raw": "{\"hooks\": ",
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": null, "settings_raw": "{\"hooks\": "},
+        {"action": "status", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": null, "settings_raw": "{\"hooks\": "},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": null, "settings_raw": "{\"hooks\": "}
+      ]
+    },
+    {
+      "name": "edge: empty settings file fails",
+      "initial": null,
+      "initial_raw": "",
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": null, "settings_raw": ""}
+      ]
+    },
+    {
+      "name": "edge: null settings file",
+      "initial": null,
+      "initial_raw": "null",
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed (no hooks section)", "settings": null},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "edge: hooks of the wrong type fail instead of being overwritten",
+      "initial": {"hooks": [], "model": "opus"},
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "not installed (no hooks section)", "settings": {"hooks": [], "model": "opus"}},
+        {"action": "install", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": {"hooks": [], "model": "opus"}}
+      ]
+    },
+    {
+      "name": "edge: event list of the wrong type fails instead of being overwritten",
+      "initial": {"hooks": {"PreToolUse": {"matcher": "Bash"}}},
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "error": true, "summary": null, "settings": {"hooks": {"PreToolUse": {"matcher": "Bash"}}}}
+      ]
+    },
+    {
+      "name": "edge: non-object items in event lists survive",
+      "initial": {"hooks": {"PostToolUse": ["text", 3, null, {"matcher": "", "hooks": "not-a-list"}]}},
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": ["text", 3, null, {"hooks": "not-a-list", "matcher": ""}, {"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "removed 2 hook entr(y/ies) from {path}", "settings": {"hooks": {"PostToolUse": ["text", 3, null, {"hooks": "not-a-list", "matcher": ""}]}}}
+      ]
+    },
+    {
+      "name": "edge: foreign hooks mentioning rufix survive",
+      "note": "Only commands Install writes are rufix entries: an executable named rufix or rufix.exe, optionally quoted, then hook and optionally --env-files.",
+      "initial": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "/home/RUFIX-fan/log.sh"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "rufix-helper hook"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"C:/x/rufix.exe\" hook --verbose"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"C:/Old Place/RUFIX.EXE\" hook --env-files"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "rufix hook"}]}]}},
+      "steps": [
+        {"action": "status", "options": {"exe_dir": "/tools"}, "summary": "stale: PostToolUse duplicated, PreToolUse missing; re-run rufix install", "settings": {"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "/home/RUFIX-fan/log.sh"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "rufix-helper hook"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"C:/x/rufix.exe\" hook --verbose"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "\"C:/Old Place/RUFIX.EXE\" hook --env-files"}]}, {"matcher": "", "hooks": [{"type": "command", "command": "rufix hook"}]}]}}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "removed 2 hook entr(y/ies) from {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "/home/RUFIX-fan/log.sh", "type": "command"}], "matcher": ""}, {"hooks": [{"command": "rufix-helper hook", "type": "command"}], "matcher": ""}, {"hooks": [{"command": "\"C:/x/rufix.exe\" hook --verbose", "type": "command"}], "matcher": ""}]}}}
+      ]
+    },
+    {
+      "name": "edge: exe dir with spaces is quoted",
+      "initial": null,
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/opt/my tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/opt/my tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/opt/my tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": "/opt/my tools"}, "summary": "installed: PostToolUse, PreToolUse", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/opt/my tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/opt/my tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "edge: empty exe dir uses PATH",
+      "initial": null,
+      "steps": [
+        {"action": "install", "options": {"exe_dir": ""}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "rufix hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "rufix hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}},
+        {"action": "status", "options": {"exe_dir": ""}, "summary": "installed: PostToolUse, PreToolUse", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "rufix hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "rufix hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}}}
+      ]
+    },
+    {
+      "name": "edge: uninstall of only rufix events removes the hooks key",
+      "initial": {"model": "opus"},
+      "steps": [
+        {"action": "install", "options": {"exe_dir": "/tools"}, "summary": "installed 2 hook entr(y/ies) in {path}", "settings": {"hooks": {"PostToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 30, "type": "command"}], "matcher": ""}], "PreToolUse": [{"hooks": [{"command": "\"/tools/rufix\" hook", "onFailure": "block", "timeout": 10, "type": "command"}], "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__"}]}, "model": "opus"}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "removed 2 hook entr(y/ies) from {path}", "settings": {"model": "opus"}},
+        {"action": "uninstall", "options": {"exe_dir": "/tools"}, "summary": "no hooks section", "settings": {"model": "opus"}}
+      ]
+    }
+  ]
+}
