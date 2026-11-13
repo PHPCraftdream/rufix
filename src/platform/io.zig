@@ -99,8 +99,13 @@ pub fn readFile(a: std.mem.Allocator, path: []const u8) !?[]u8 {
     return try readAll(a, f);
 }
 
-/// Writes through a temporary file renamed over the target.
-pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8) !void {
+extern "c" fn chmod([*:0]const u8, c_uint) c_int;
+
+pub const Mode = enum { data, executable };
+
+/// Writes through a temporary file renamed over the target. An executable
+/// copy gets mode 0755 on POSIX; fopen alone would leave it unrunnable.
+pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8, mode: Mode) !void {
     const tmp = try std.mem.concat(a, u8, &.{ path, ".rufix-tmp" });
     {
         const f = try open(a, tmp, "wb") orelse return error.OpenFailed;
@@ -112,6 +117,8 @@ pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8)
         _ = _wremove(wp);
         if (_wrename(try wide(a, tmp), wp) != 0) return error.RenameFailed;
     } else {
-        if (rename(try a.dupeZ(u8, tmp), try a.dupeZ(u8, path)) != 0) return error.RenameFailed;
+        const ztmp = try a.dupeZ(u8, tmp);
+        if (mode == .executable and chmod(ztmp, 0o755) != 0) return error.ChmodFailed;
+        if (rename(ztmp, try a.dupeZ(u8, path)) != 0) return error.RenameFailed;
     }
 }

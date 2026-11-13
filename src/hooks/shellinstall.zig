@@ -38,7 +38,7 @@ fn save(a: std.mem.Allocator, path: []const u8, obj: *json.Object) !void {
     try json.write(a, &out, .{ .object = obj }, 2, 0);
     try out.append(a, '\n');
     try os.mkdirAll(a, os.dir(path));
-    try io.writeFileAtomic(a, path, out.items);
+    try io.writeFileAtomic(a, path, out.items, .data);
 }
 
 /// Copies the running binary to rufix-shell; an identical copy in use is kept.
@@ -47,7 +47,7 @@ fn copySelf(a: std.mem.Allocator, exe_path: []const u8, target: []const u8) !voi
     if (try io.readFile(a, target)) |old| {
         if (std.mem.eql(u8, old, data)) return;
     }
-    try io.writeFileAtomic(a, target, data);
+    try io.writeFileAtomic(a, target, data, .executable);
 }
 
 pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []const u8, env_files: bool) ![]const u8 {
