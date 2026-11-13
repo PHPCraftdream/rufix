@@ -1,12 +1,13 @@
 rufix
 rufix.exe
-*.test
 
 # real secret replacements never leave the machine;
 # commits carry only test fixtures (rufix_test_code_secret_number_001 style)
 secrets/
 
-# Generated filters can contain private patterns.
-internal/compiledregexp/filters_generated.go
-internal/compiledregexp/fixtures_generated_test.go
-internal/compiledregexp/.filters-*.tmp
+# Zig build output
+.zig-cache/
+zig-out/
+
+# Local Claude Code setup written by `rufix install --project`: holds machine paths
+.claude/

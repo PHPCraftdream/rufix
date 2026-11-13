@@ -2,28 +2,28 @@
 
 [![CI](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml/badge.svg)](https://github.com/PHPCraftdream/rufix/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT_OR_Apache--2.0-blue.svg)](#license)
-[![Go](https://img.shields.io/github/go-mod/go-version/PHPCraftdream/rufix?logo=go&logoColor=white)](https://go.dev)
-[![Go Report Card](https://goreportcard.com/badge/github.com/PHPCraftdream/rufix)](https://goreportcard.com/report/github.com/PHPCraftdream/rufix)
+[![Zig 0.16](https://img.shields.io/badge/Zig-0.16-f7a41d?logo=zig&logoColor=white)](https://ziglang.org)
 
 Keep secrets and internal hosts out of the model context in Claude Code.
 
-`rufix` is a single Go binary that acts as a pair of
+`rufix` is a single small binary (about 200 KiB, written in Zig, no
+dependencies) that acts as a pair of
 [Claude Code hooks](https://code.claude.com/docs/en/hooks): it redacts tool
-output before it reaches the model, and restores placeholders in Bash
-commands that legitimately target your internal hosts. The hook installer is
-built into the binary — setup is two commands.
+output before it reaches the model, and restores placeholders in commands and
+local file edits that legitimately target your internal hosts. Optionally it
+also wraps the shell of chosen repositories, so even the output of a failing
+command is redacted. The installer is built into the binary.
 
 ## Why
 
 When Claude Code reads files, runs commands or calls MCP servers, the raw
-output — with your Jira/Confluence/GitLab tokens and internal hostnames — is
-sent verbatim to the model provider. rufix closes that channel at the hook
-layer:
+output — with your tokens and internal hostnames — is sent verbatim to the
+model provider. rufix closes that channel:
 
 - known values (compiled into the binary; env files are opt-in) become
   **reversible** `[S:hash8]` placeholders;
-- token-shaped strings that match hardcoded format rules but are not known
-  values become **irreversible** `[REDACTED:<rule>]`;
+- filters (regex rules you define) mask or redact everything else, optionally
+  reversibly (`*.example.com` ↔ `*.intra`), with the letter case preserved;
 - the tool output shape is preserved exactly, so the hook replacement is
   always accepted;
 - any internal error blocks the tool call — fail-closed.
@@ -31,260 +31,192 @@ layer:
 ```
 in:   Bearer rufix_test_code_secret_number_001 at https://jira.internal.example/x
 out:  Bearer [S:173410ad] at [S:95132e89]/x
-
-in:   token ATATT3abcdefgHIJKLMNOPQRSTUVWX
-out:  token [REDACTED:atlassian-pat]
 ```
 
 ## How it works
 
 | Hook | Matcher | Action |
 |---|---|---|
-| `PostToolUse` | all tools | deep string walk over the tool response → `updatedToolOutput` / `updatedMCPToolOutput` |
-| `PreToolUse` | `Bash` | if the command contains a placeholder whose value is a protected host, restore all placeholders in it (`updatedInput`) |
-| `PreToolUse` | `mcp__*` | domain-only restore in tool arguments (`updatedInput`): masked names (`*.intra`) become real inside comments/links; credential `[S:hash]` placeholders are never restored into MCP arguments — no secret travels to the target server |
+| `PostToolUse` | all tools | deep string walk over the tool response → `updatedToolOutput` / `updatedMCPToolOutput` (MCP object keys are masked too) |
+| `PreToolUse` | `Bash` | if the command references a protected host, restore all placeholders in it (`updatedInput`) |
+| `PreToolUse` | `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Grep`, `Glob` | same restore, gated on any string argument referencing a protected host |
+| `PreToolUse` | `mcp__*` | domain-only restore: masked names become real in comments/links; `[S:hash]` credentials are never restored into MCP arguments |
 
-Placeholders the model prints back are inert: a Bash command is restored
-only when it references something the allowlist honours — a protected-host
-placeholder or a masked `AllowlistSeed` pattern (e.g. `*.intra`) — so a
-secret cannot be smuggled to a foreign host.
+Placeholders the model prints back are inert: a call is restored only when it
+references something the allowlist honours — a protected-host placeholder or
+a mask of an `allowlist_seed` filter — so a secret cannot be smuggled to a
+foreign host. Web tools and every other tool restore nothing. Only values that
+come from a URL count as hosts; a credential that contains a dot never does.
 
-### Verifying restore end-to-end
+The PreToolUse matcher is the regex
+`^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__`: Claude Code
+reads a matcher of plain names and `|` as exact names, so a bare `mcp__` would
+match no MCP tool.
 
-Restore happens inside the tool call, so its effect is visible in what the
-command actually executed — not in `rufix hook` stdout (which is itself
-redacted on display). Byte-level check:
+### Shell wrapper (per repository)
 
-```bash
-echo api.project.intra > /tmp/rt.txt   # a command referencing a masked host
-od -c /tmp/rt.txt                      # a p i . p r o j e c t . c o m — restore ran
-```
-
-If the file contains the real name, PreToolUse restored the mask before
-execution. Inspect results with `od`/hex dumps: plain stdout is redacted by
-the hook, which makes manual verification misleading.
-
-## Install & setup
-
-One command does everything (build → global binary → hooks → verification):
+PostToolUse runs only for successful tools, so the output of a Bash command
+that exits non-zero would reach the model unmasked. In a repository:
 
 ```bash
-./install.sh              # sh: git-bash, Linux, macOS
-.\install.ps1             # Windows PowerShell
-install.cmd               # Windows cmd.exe — runs install.ps1, remaps --flags to -Switches
+rufix install --project --shell
 ```
 
-The Windows installer (`install.cmd` / `install.ps1`) generates regex programs,
-then builds and installs the application once with `CGO_ENABLED=0`, `-trimpath`
-and `-ldflags="-s -w -buildid="`. Standard Go compiler optimizations remain
-enabled; debug symbols and DWARF data are omitted. No UPX or startup
-self-decompression is used, and no separate Go runtime needs to be installed.
-These settings reduce executable size; they do not guarantee lower startup
-latency. The script restores the caller's `CGO_ENABLED` value afterwards.
+copies the binary to `rufix-shell` next to itself and sets
+`CLAUDE_CODE_SHELL_PREFIX` in that repository's `.claude/settings.local.json`.
+Claude Code then runs every shell command through `rufix-shell`: Bash tool
+calls (recognised by Claude Code's shell-snapshot preamble) run with stdout
+and stderr masked line by line and their exit code kept; hooks, the status
+line and MCP server start-up pass through untouched. The wrapper is never
+installed globally, and it never replaces a prefix that points elsewhere.
+`rufix uninstall --project` removes it again.
 
-Flags:
+### Prompt and error mod (per repository)
 
-```
---project / -Project      hooks into ./.claude/settings.json instead of the global one
---revert  / -Revert       uninstall hooks (same scope) and remove the binary
-```
-
-Manual equivalent:
+No settings hook can rewrite what the user types. A Claude Code
+[mod](https://code.claude.com/docs/en/plugins/mods/events.md) can, so in a
+repository:
 
 ```bash
-# 1. Generate private regex programs, then build the dev binary
-go generate ./internal/secretvalues
-go build
-
-# 2. Install the binary globally: $GOPATH/bin/rufix(.exe) — usually ~/go/bin
-go install .
-
-# 3. Install hooks into Claude Code settings.json
-rufix install            # global:  ~/.claude/settings.json
-rufix install --project  # project: ./.claude/settings.json
-
-# Verify (stats + fake-pattern demo; never prints real values)
-rufix check
+rufix install --project --mod
 ```
 
-Hook commands reference the absolute path of the executable that ran
-`install`, and every install **fully reinstalls** the rufix hook entries:
-stale entries from previous installs are removed and re-added fresh after
-the rebuild, while foreign hooks are preserved. Run step 3 from the
-installed binary (step 2), not from a temp `go run` build.
+writes a mod to that repository's `.claude/skills/rufix/`, which Claude Code
+loads for that project only. The mod replaces nothing itself: it hands the
+text to the binary (`rufix redact`), which applies the same direction as for
+files and shell output — masking.
+
+- **Your prompt** (`prompt.submit`): the model, the transcript and the prompt
+  history get the masked text. Slash commands pass unchanged.
+- **A failed tool's error** (`tool.call`): the error text, which no
+  PostToolUse hook ever sees, reaches the model masked — for every tool, MCP
+  included.
+- **What the engine injects itself** (`prompt.attachment`, `prompt.section`,
+  `prompt.context`): working-directory notices, `@`-mentioned files,
+  CLAUDE.md and git status.
+- **A skill's text** (`skill.prompt`) and **the task given to a subagent**
+  (`agent.spawn`).
+- **Fail-closed**: when masking fails, the prompt is not sent and the error
+  is withheld.
+
+The mod names the binary by its absolute path: re-run the command after
+moving rufix. `rufix uninstall --project` removes the mod's own files only.
+
+## Install
+
+Requires [Zig 0.16](https://ziglang.org/download/).
 
 ```bash
-# Uninstall (hooks first, then the binary)
-./install.sh --revert     # or: .\install.ps1 -Revert, or: install.cmd --revert
-
-# Manual equivalent:
-rufix uninstall            # hooks, global settings
-rufix uninstall --project  # hooks, project settings
-go clean -i .              # the binary ($GOPATH/bin/rufix.exe)
+./install.sh                          # sh: Linux, macOS, Git Bash
+install.cmd                           # Windows cmd.exe (runs install.ps1)
+./install.sh --project --shell --mod  # hooks + shell wrapper + mod for this repository
+./install.sh --revert                 # uninstall hooks, the binaries and the PATH entry
 ```
+
+The installer builds `zig build` (ReleaseSmall), copies the binary to
+`$RUFIX_BIN_DIR` (default `~/.local/bin`, on Windows
+`%LOCALAPPDATA%\rufix\bin`), makes that folder part of the PATH, and runs
+`rufix install` and `rufix check` from there, so the hook commands reference
+that absolute path. On Linux, macOS and Git Bash it adds one marked line to
+`~/.profile` (and `~/.bashrc` / `~/.zshrc` when they exist); on Windows it adds
+the folder to the user's PATH in the registry, keeping `%VARIABLE%` entries
+unexpanded. `--revert` takes both back. Every install fully reinstalls the
+rufix entries and keeps foreign hooks; `rufix status` reports `stale` when an
+entry differs from what this binary installs.
+
+Flags: `--project` (repository settings instead of `~/.claude/settings.json`),
+`--env-files` (hooks also load env files), `--shell` and `--mod` (both need
+`--project`), `--revert`.
 
 ## Replacement data
 
-**Default — the compiled Go file only** `internal/secretvalues/values.go`:
-a `Vars()` map and `Rules()` filters. The committed
-version is a stub with empty values; the file is pinned with
-`git update-index --skip-worktree`, so local values never get committed:
+Your values and filters live in `secrets/values.zig` (git ignores `secrets/`);
+without it the empty committed skeleton `src/values.zig` is compiled and
+nothing is replaced. Same shape as the skeleton:
 
-```bash
-git add internal/secretvalues/values.go                        # already done
-git update-index --skip-worktree internal/secretvalues/values.go
-git ls-files -v internal/secretvalues/                         # S = pinned
+```zig
+pub const vars = .{
+    .{ "JIRA_TOKEN", "..." },
+    .{ "JIRA_URL", "https://jira.example.com" },
+};
+
+pub const rules = .{
+    .{
+        .name = "com-to-intra",
+        .match = "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)com\\b",
+        .replace = "${1}intra",
+        .restore_match = "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)intra\\b",
+        .restore_replace = "${1}com",
+        .allowlist_seed = true,
+        .preserve_case = true,
+    },
+};
 ```
 
-Fill `Vars()` and `Rules()` locally, then run
-`go generate ./internal/secretvalues && go build && go install .` — exact
-values and ready-to-run regex programs are compiled into your private binary. **Never distribute the executable** —
-strings of a binary built with filled values contain the secrets.
+- `vars`: names with `TOKEN`/`SECRET`/`PASSWORD`/`PASSWD`/`PAT`/`KEY`/
+  `CREDENTIAL` parts protect the whole value (6+ bytes); URL values protect the
+  URL, its host with and without port and a userinfo password.
+- `rules`: RE2 syntax as in Go's `regexp` (no lookaround, `\b` is ASCII);
+  `${n}` templates; `strict_tld` rejects a match followed by `.label`;
+  `preserve_case` carries the letter case into the mask and back;
+  `until_stable` re-applies a rule while it still changes the text (for
+  matches that consume the delimiter the next one needs, such as `_`). Unicode
+  classes (`\p{..}`) and case folding outside Latin/Greek/Cyrillic are
+  rejected at build time rather than matched partially.
 
-External files are **disabled by default**, even when `RUFIX_ENV_FILE` or
-`RUFIX_SECRETS_DIR` is set. The default hook does not search for or read them.
-Enable them explicitly:
+Values are compiled into the binary: **never distribute the executable**.
+Rebuild (re-run the installer) after editing the file.
 
-```bash
-rufix install --env-files             # persist the flag in both hook commands
-rufix install --project --env-files   # same, project settings
-rufix check --env-files               # diagnose the optional external source
-rufix hook --env-files                # direct hook invocation; JSON on stdin
-```
+### Optional env files
 
-With `--env-files`, fallbacks are `$RUFIX_ENV_FILE` (file) →
-`$RUFIX_SECRETS_DIR` (dir) → `.atlassian.env` walking up from the hook's
-`cwd` → `<exe dir>/secrets` → `~/.config/rufix/secrets`. A directory is
-scanned for `*.env` files (dotfiles included), merged earlier-wins. Compiled
-values override external files. Reinstall without `--env-files` to disable
-the external source again. Existing env-file users must opt in when upgrading.
+`--env-files` (on `hook`, `install`, `check`) also reads `KEY=VALUE` files:
+`$RUFIX_ENV_FILE` → `$RUFIX_SECRETS_DIR` → a folder with `.atlassian.env`
+walking up from the hook's cwd → `<exe dir>/secrets` →
+`~/.config/rufix/secrets`. Compiled values override external files.
 
-Recognised variables: names with `TOKEN` / `SECRET` / `PASSWORD` / `PASSWD` /
-`PAT` / `KEY` / `CREDENTIAL(S)` segments (values ≥ 6 chars) and URL-valued
-variables (full URL, bare host and portless host are all protected).
-Usernames, languages and paths are left untouched.
-
-## Filters (data, not code)
-
-The engine ships **zero rules and zero values** — by default nothing is
-replaced. Every filter, mask and value lives in the skip-worktree
-`internal/secretvalues/values.go` (`Rules()` / `Vars()`) — never in committed
-sources. An engine change required by a new filter is a P0 blocker. A
-commented example ships inside the skeleton; a typical local set:
-
-| Rule | Action |
-|---|---|
-| `com-to-intra` | every `*.com` domain masked as `*.intra`, restored back in allowlisted Bash commands |
-| `atlassian-pat` | `ATATT…` Atlassian API tokens |
-| `gitlab-pat` | `glpat-…` GitLab personal access tokens |
-| `jwt` | `eyJ…` three-segment JWTs |
-| `bearer` / `basic` | `Authorization` header values |
-| `kv-json` | `"password": "…"`-style JSON fields |
-| `query-param` | `?token=…` / `&api_key=…` URL parameters |
-| `env-kv` | `TOKEN=…` / `SECRET=…` env-style lines |
-
-A filter can carry a reverse rule (`RestoreMatch`/`RestoreReplace`) — that is
-how `*.intra` goes back to `*.com` — and `AllowlistSeed: true` to make its
-masked patterns restoreable in Bash commands. Known exact values are always
-replaced before the rules run, so your own tokens inside a `Bearer` header
-stay reversible. The `env-kv` rule skips already-redacted placeholders (Go
-RE2 has no lookahead, so the value charset simply excludes `[`).
-
-## Hook execution
-
-Each invocation is a separate process; there is no background service.
-`go generate ./internal/secretvalues` compiles both regex directions into
-Go literals before building. Setup scripts and CI run this step automatically;
-plain `go build` does not run Go generators. The hook loads the generated
-programs without parsing or compiling regex, including on its first call.
-Missing or stale programs block the hook instead of falling back to runtime
-compilation. Identical expressions share one ready-to-run program.
-
-The matcher is a pinned copy of Go 1.26.0 `regexp`, under the Go authors'
-BSD license; its matching semantics and execution algorithms are unchanged.
-See [internal/compiledregexp/README.md](internal/compiledregexp/README.md).
-`filters_generated.go` is gitignored because it can contain private patterns.
-The committed engine still ships no filters or values; fixture programs are
-generated into a separate test-only file.
-
-Exact substitutions count matches while replacing. Regex substitutions reuse
-one full-string match search; seed and StrictTLD rules retain their existing
-per-match replacement semantics. JSON is decoded directly from stdin without
-waiting for EOF after the request, and its containers are updated in place.
-Numbers and the tool output shape are preserved.
-
-## CLI reference
+## CLI
 
 ```
-rufix hook [--env-files]                process hook stdin JSON
-rufix install [--project] [--env-files]  install hook entries
-rufix uninstall [--project]            remove rufix hook entries only
-rufix status [--project]               show install state
-rufix check [--project] [--env-files]   replacement stats + fake-pattern demo
+rufix hook [--env-files]                       process hook stdin JSON
+rufix install [--project] [--env-files] [--shell] [--mod]
+rufix uninstall [--project]
+rufix redact [--env-files]                     mask stdin to stdout (what the mod calls)
+rufix status [--project]                       installed / stale / not installed
+rufix check [--project] [--env-files]          counts + fake-pattern demo, never real values
 rufix version
 ```
 
 ## Fail-closed behaviour
 
-- Internal error in hook mode → exit code 2 → Claude Code blocks the call.
-- Hook entries carry `onFailure: "block"` (covers hook timeouts).
-- Compiled-only mode needs no external files and emits no missing-file warning.
-- With `--env-files`, a missing external source falls back to compiled values
-  and rules with a warning. A file read error blocks the hook.
+Any internal error in hook mode exits 2 without stdout, so Claude Code blocks
+the tool call; hook entries carry `onFailure: "block"`.
 
 ## What rufix does NOT protect
 
-- **User prompts, CLAUDE.md, conversation history** — they reach the model
-  before any hook. Filter those in the LLM gateway/proxy (request-body
-  filtering), not here.
-- **Local telemetry** (OTel spans) captures original output before hooks run.
-- **The local session transcript** on disk is not part of this protection.
-
-rufix protects the model boundary, not your disk.
+- **User prompts without the mod**: only `--mod` masks what you type; CLAUDE.md
+  and earlier conversation history are not masked either way.
+- **The local session transcript and local telemetry** see original output
+  (with the mod, the transcript holds your prompt masked).
+- **Failed tool calls without the mod or the shell wrapper**: a failing Bash
+  command's output and MCP error results then reach the model unmasked.
+- **`@` file mentions** bypass hooks; `CLAUDE_CODE_DISABLE_FILE_MENTIONS=1`
+  turns them off.
+- **A stale binary**: re-run the installer after editing `secrets/values.zig`.
+- **Text your filters do not match** (`\b` does not separate `_` or letters).
 
 ## Development
 
 ```bash
-go generate ./internal/secretvalues && go build ./... && go vet ./... && go test ./...
+zig build test      # conformance fixtures, CLI scenarios, repository linter
+zig build           # release binary in zig-out/bin
 ```
 
-See [AGENTS.md](AGENTS.md) for architecture notes, invariants and
-conventions. CI (`.github/workflows/ci.yml`) runs build, vet and tests on
-Ubuntu and Windows. Windows tests exercise a temporary copy of the installer
-with mocked commands, checking failure propagation and environment restoration
-without installing real hooks. CI also builds the compact release configuration
-on both systems and smoke-checks the version, valid/invalid hook input, and a
-4 MiB executable-size budget for the empty committed configuration. Per-process
-wall times are logged for diagnostics, not enforced as a speed benchmark on
-shared runners. Release smoke tests skip unless `RUFIX_RELEASE_BINARY` names
-the binary to check.
-
-Commits follow Conventional Commits with an emoji prefix
-(`✨ feat: …`, `🐛 fix: …`, `📝 docs: …`).
-
-Only test fixtures are committed: long harmless phrases like
-`rufix_test_code_secret_number_001` and `*.internal.example` hosts. The
-`secrets/` folder is gitignored; `internal/secretvalues/values.go` is pinned
-with skip-worktree.
-
-## Security & privacy
-
-See [SECURITY.md](SECURITY.md) for reporting vulnerabilities. rufix never
-sends data anywhere: it is a local filter between Claude Code and your model
-gateway.
+[conformance/](conformance/README.md) holds the behaviour contract as JSON
+fixtures (engine, hook, installer, regex dialect, CLI). The linter keeps every
+file at most 500 lines and every folder except the root at most 7 entries.
+See [AGENTS.md](AGENTS.md) for architecture and invariants.
 
 ## License
 
-Dual-licensed under either of:
-
-- [MIT](LICENSE-MIT)
-- [Apache-2.0](LICENSE-APACHE)
-
-at your option.
-
-The bundled Go `regexp` matcher retains the Go authors' BSD license; see
-[internal/compiledregexp/LICENSE](internal/compiledregexp/LICENSE).
-
-CI checks dependency licenses against an explicit allowlist and verifies the
-bundled source notices. See [the license policy](docs/licensing.md) for the
-checks, review obligations, and automation limits.
+Dual-licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE); see
+[docs/licensing.md](docs/licensing.md).

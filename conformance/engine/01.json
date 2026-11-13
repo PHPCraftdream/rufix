@@ -1,0 +1,378 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#enginejson",
+  "cases": [
+    {
+      "name": "exact values are reversible placeholders",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "steps": [
+        {"op": "redact", "input": "Bearer rufix_test_code_secret_number_001 at https://jira.internal.example/x", "output": "Bearer [S:173410ad] at [S:95132e89]/x", "count": 2},
+        {"op": "restore", "input": "Bearer [S:173410ad] at [S:95132e89]/x", "output": "Bearer rufix_test_code_secret_number_001 at https://jira.internal.example/x", "count": 2},
+        {"op": "redact", "input": "Bearer [S:173410ad] at [S:95132e89]/x", "output": "Bearer [S:173410ad] at [S:95132e89]/x", "count": 0}
+      ]
+    },
+    {
+      "name": "url values protect the url, the host and the portless host",
+      "vars": {"SERVICE_URL": "https://git.internal.example:8443/api"},
+      "steps": [
+        {"op": "redact", "input": "clone https://git.internal.example:8443/api/repo", "output": "clone [S:fc0d6633]/repo", "count": 1},
+        {"op": "redact", "input": "ssh git.internal.example:8443", "output": "ssh [S:e8a300d7]", "count": 1},
+        {"op": "redact", "input": "ping git.internal.example", "output": "ping [S:e773bd2c]", "count": 1},
+        {"op": "host_placeholder", "input": "curl [S:e773bd2c]", "result": true}
+      ]
+    },
+    {
+      "name": "credential keys need six characters, other keys need a url",
+      "vars": {"API_KEY": "rufix_test_code_secret_number_004", "DB_PASSWORD": "abc12", "EMPTY_SECRET": "", "GREETING": "rufix_test_plain_value_not_secret", "MULTI_TOKEN": "rufix_test_line_one\nrufix_test_line_two"},
+      "steps": [
+        {"op": "redact", "input": "abc12 rufix_test_code_secret_number_004 rufix_test_plain_value_not_secret rufix_test_line_one", "output": "abc12 [S:81321aba] rufix_test_plain_value_not_secret rufix_test_line_one", "count": 1}
+      ]
+    },
+    {
+      "name": "longer exact values win over contained ones",
+      "vars": {"LONG_TOKEN": "rufix_test_code_secret_number_002_extended", "SHORT_TOKEN": "rufix_test_code_secret_number_002"},
+      "steps": [
+        {"op": "redact", "input": "a=rufix_test_code_secret_number_002_extended b=rufix_test_code_secret_number_002", "output": "a=[S:f5cf35e9] b=[S:f9585726]", "count": 2},
+        {"op": "restore", "input": "a=[S:00000000] keeps unknown placeholders", "output": "a=[S:00000000] keeps unknown placeholders", "count": 0}
+      ]
+    },
+    {
+      "name": "exact values run before rules and stay reversible",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "rules": [{"name": "bearer", "match": "(?i)(bearer\\s+)[A-Za-z0-9_\\-.+/=]{16,}", "replace": "${1}[REDACTED:bearer]"}],
+      "steps": [
+        {"op": "redact", "input": "Authorization: Bearer rufix_test_code_secret_number_001", "output": "Authorization: Bearer [S:173410ad]", "count": 1},
+        {"op": "redact", "input": "Authorization: Bearer rufix_test_unknown_token_value_0003", "output": "Authorization: Bearer [REDACTED:bearer]", "count": 1},
+        {"op": "restore", "input": "Authorization: Bearer [REDACTED:bearer]", "output": "Authorization: Bearer [REDACTED:bearer]", "count": 0}
+      ]
+    },
+    {
+      "name": "env-kv rule skips already redacted values",
+      "vars": {"DEPLOY_TOKEN": "rufix_test_code_secret_number_005"},
+      "rules": [{"name": "env-kv", "match": "(?m)^([A-Z_]*(?:TOKEN|SECRET|PASSWORD)[A-Z_]*=)[^\\s\\[]+", "replace": "${1}[REDACTED]"}],
+      "steps": [
+        {"op": "redact", "input": "DEPLOY_TOKEN=rufix_test_code_secret_number_005\nOTHER_SECRET=rufix_test_unknown_value_0006\nPLAIN=value", "output": "DEPLOY_TOKEN=[S:b135c38e]\nOTHER_SECRET=[REDACTED]\nPLAIN=value", "count": 2}
+      ]
+    },
+    {
+      "name": "domain mask round trip",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "steps": [
+        {"op": "has_domain_mask", "input": "see https://api.old.tld/page", "result": false},
+        {"op": "redact", "input": "see https://api.old.tld/page and git.deep.old.tld.", "output": "see https://api.masked/page and git.deep.masked.", "count": 2},
+        {"op": "redact", "input": "see https://api.masked/page and git.deep.masked.", "output": "see https://api.masked/page and git.deep.masked.", "count": 0},
+        {"op": "restore", "input": "see https://api.old.tld/page", "output": "see https://api.old.tld/page", "count": 0},
+        {"op": "has_domain_mask", "input": "see https://api.masked/page", "result": true},
+        {"op": "host_placeholder", "input": "curl https://api.masked/page", "result": true},
+        {"op": "restore", "input": "see https://api.masked/page and git.deep.masked.", "output": "see https://api.old.tld/page and git.deep.old.tld.", "count": 2},
+        {"op": "restore_domains", "input": "see https://api.masked/page", "output": "see https://api.old.tld/page", "count": 1}
+      ]
+    },
+    {
+      "name": "strict tld rejects a middle label",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "allowlist_seed": true, "strict_tld": true}],
+      "steps": [
+        {"op": "redact", "input": "https://api.xq/v1 and API.XQ.UP end", "output": "https://api.wide/v1 and API.XQ.UP end", "count": 1},
+        {"op": "redact", "input": "open https://api.xq", "output": "open https://api.wide", "count": 1},
+        {"op": "redact", "input": "see api.xq. now", "output": "see api.wide. now", "count": 1},
+        {"op": "restore", "input": "curl https://api.wide/v1 and keep X.WIDE.UP", "output": "curl https://api.xq/v1 and keep X.WIDE.UP", "count": 1},
+        {"op": "restore", "input": "api.wide at end and api.wide. next", "output": "api.xq at end and api.xq. next", "count": 2}
+      ]
+    },
+    {
+      "name": "protected-host evidence gates the restore",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "steps": [
+        {"op": "host_placeholder", "input": "echo [S:173410ad]", "result": false},
+        {"op": "host_placeholder", "input": "curl [S:95132e89]/rest -H 'Authorization: Bearer [S:173410ad]'", "result": true},
+        {"op": "host_placeholder", "input": "echo [S:abcd1234]", "result": false},
+        {"op": "restore", "input": "echo [S:abcd1234] [S:173410ad]", "output": "echo [S:abcd1234] rufix_test_code_secret_number_001", "count": 1},
+        {"op": "restore_domains", "input": "curl [S:95132e89] [S:173410ad]", "output": "curl [S:95132e89] [S:173410ad]", "count": 0},
+        {"op": "has_domain_mask", "input": "curl [S:95132e89]", "result": false}
+      ]
+    },
+    {
+      "name": "placeholder syntax is exact",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "steps": [
+        {"op": "restore", "input": "[S:173410AD] [S:173410a] [S:[S:173410ad] [S:173410ad]] [s:173410ad]", "output": "[S:173410AD] [S:173410a] [S:rufix_test_code_secret_number_001 rufix_test_code_secret_number_001] [s:173410ad]", "count": 2}
+      ]
+    },
+    {
+      "name": "domain-only restore never resolves exact placeholders",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "steps": [
+        {"op": "restore_domains", "input": "token [S:173410ad] link https://api.masked/x", "output": "token [S:173410ad] link https://api.old.tld/x", "count": 1},
+        {"op": "restore", "input": "token [S:173410ad] link https://api.masked/x", "output": "token rufix_test_code_secret_number_001 link https://api.old.tld/x", "count": 2}
+      ]
+    },
+    {
+      "name": "preserve case round trip",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "preserve_case": true}, {"name": "word", "match": "(?i)\\bxenon\\b", "replace": "xylophone", "restore_match": "(?i)\\bxylophone\\b", "restore_replace": "xenon", "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "api.xq API.XQ Api.Xq api.xQ xenon XENON Xenon XeNon", "output": "api.wide API.WIDE Api.Wide api.wIde xylophone XYLOPHONE Xylophone XyLophone", "count": 8},
+        {"op": "restore", "input": "api.wide API.WIDE Api.Wide api.wIde xylophone XYLOPHONE Xylophone XyLophone", "output": "api.xq API.XQ Api.Xq api.xQ xenon XENON Xenon XeNon", "count": 8},
+        {"op": "redact", "input": "api.wide API.WIDE xylophone", "output": "api.wide API.WIDE xylophone", "count": 0},
+        {"op": "restore", "input": "api.xq API.XQ xenon", "output": "api.xq API.XQ xenon", "count": 0}
+      ]
+    },
+    {
+      "name": "case-insensitive rule without preserve case uses the template spelling",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq"}],
+      "steps": [
+        {"op": "redact", "input": "API.XQ", "output": "API.wide", "count": 1},
+        {"op": "restore", "input": "API.WIDE", "output": "API.xq", "count": 1}
+      ]
+    },
+    {
+      "name": "word swap treats underscore as a boundary",
+      "note": "until_stable applies the rule again while it changes the text: a match consumes a trailing underscore, so the second word of word_word needs another pass.",
+      "rules": [{"name": "word", "match": "(?i)(?:\\b|(_))acmeco(?:\\b|(_))", "replace": "${1}zephyr${2}", "restore_match": "(?i)(?:\\b|(_))zephyr(?:\\b|(_))", "restore_replace": "${1}acmeco${2}", "allowlist_seed": true, "preserve_case": true, "until_stable": true}],
+      "steps": [
+        {"op": "redact", "input": "acmeco Acmeco ACMECO AcmeCo acmeco_acmeco ACMECO_API_URL my_acmeco_client acmeco-cli \"acmeco\" acmeco.io", "output": "zephyr Zephyr ZEPHYR ZephYr zephyr_zephyr ZEPHYR_API_URL my_zephyr_client zephyr-cli \"zephyr\" zephyr.io", "count": 11},
+        {"op": "redact", "input": "acmecos myacmeco acmeco2 2acmeco AcmecoClient", "output": "acmecos myacmeco acmeco2 2acmeco AcmecoClient", "count": 0},
+        {"op": "restore", "input": "zephyr Zephyr ZEPHYR ZephYr zephyr_zephyr ZEPHYR_API_URL my_zephyr_client zephyr-cli \"zephyr\" zephyr.io", "output": "acmeco Acmeco ACMECO AcmeCo acmeco_acmeco ACMECO_API_URL my_acmeco_client acmeco-cli \"acmeco\" acmeco.io", "count": 11},
+        {"op": "host_placeholder", "input": "grep -r ZEPHYR_API_URL .", "result": true}
+      ]
+    },
+    {
+      "name": "forward replacements seed the allowlist inside one process",
+      "rules": [{"name": "ip", "match": "\\b10\\.20\\.\\d{1,3}\\.\\d{1,3}\\b", "replace": "[IP]", "allowlist_seed": true}],
+      "steps": [
+        {"op": "host_placeholder", "input": "ping [IP]", "result": false},
+        {"op": "redact", "input": "host 10.20.3.4 is up", "output": "host [IP] is up", "count": 1},
+        {"op": "host_placeholder", "input": "ping [IP]", "result": true},
+        {"op": "restore", "input": "ping [IP]", "output": "ping [IP]", "count": 0}
+      ]
+    },
+    {
+      "name": "non-ascii text and empty input pass through",
+      "vars": {"JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "", "output": "", "count": 0},
+        {"op": "redact", "input": "привет api.old.tld и jira.internal.example 🙂 ÄPI.OLD.TLD", "output": "привет api.masked и [S:8b58c3d4] 🙂 ÄPI.MASKED", "count": 3},
+        {"op": "restore", "input": "привет api.masked и [S:95132e89] 🙂", "output": "привет api.old.tld и https://jira.internal.example 🙂", "count": 2}
+      ]
+    },
+    {
+      "name": "no data replaces nothing",
+      "steps": [
+        {"op": "redact", "input": "Bearer rufix_test_code_secret_number_001 at https://jira.internal.example", "output": "Bearer rufix_test_code_secret_number_001 at https://jira.internal.example", "count": 0},
+        {"op": "restore", "input": "[S:173410ad] api.masked", "output": "[S:173410ad] api.masked", "count": 0},
+        {"op": "host_placeholder", "input": "[S:173410ad]", "result": false}
+      ]
+    },
+    {
+      "name": "edge: credential key names",
+      "note": "Name parts split on _ and -, any case; a part must equal a credential word.",
+      "vars": {"CREDENTIALS_FILE": "rufix_test_value_a08", "Github_Pat": "rufix_test_value_a02", "KEYS": "rufix_test_value_a04", "MONKEY": "rufix_test_value_a03", "SECRET_KEY_ID": "rufix_test_value_a06", "X__TOKEN__": "rufix_test_value_a07", "api-key": "rufix_test_value_a01", "passwd": "rufix_test_value_a05"},
+      "steps": [
+        {"op": "redact", "input": "a01 rufix_test_value_a01 rufix_test_value_a02 rufix_test_value_a03 rufix_test_value_a04 rufix_test_value_a05 rufix_test_value_a06 rufix_test_value_a07 rufix_test_value_a08", "output": "a01 [S:710ceb32] [S:1fb5e393] rufix_test_value_a03 rufix_test_value_a04 [S:db17408d] [S:d7bcd368] [S:31426953] [S:9f11d88d]", "count": 6}
+      ]
+    },
+    {
+      "name": "edge: credential length boundary",
+      "vars": {"FIVE_TOKEN": "rufx5", "SIX_TOKEN": "rufix6", "THREE_URL": "http://a.b"},
+      "steps": [
+        {"op": "redact", "input": "rufx5 rufix6 http://a.b a.b", "output": "rufx5 [S:fe5e1b94] [S:2ba0596f] a.b", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: url shapes",
+      "note": "The whole URL, its host with port and its host without port and brackets are protected; a userinfo password of 6+ bytes is a credential of its own; a scheme-less value is not a URL.",
+      "vars": {"BAD_URL": "https://%zz.internal.example", "IPV6_URL": "http://[fd00::1]:8080/x", "NO_SCHEME_URL": "plain.internal.example", "WITH_USER_URL": "https://bot:rufix_test_pw_0009@auth.internal.example/login"},
+      "steps": [
+        {"op": "redact", "input": "https://bot:rufix_test_pw_0009@auth.internal.example/login auth.internal.example [fd00::1]:8080 [fd00::1] plain.internal.example https://bot:rufix_test_pw_0009@other.example/x", "output": "[S:813a6110] [S:b5bd4d30] [S:1be015b6] [[S:cb2a2b4d]] plain.internal.example https://bot:[S:edb6145c]@other.example/x", "count": 5},
+        {"op": "host_placeholder", "input": "x [S:00000000]", "result": false}
+      ]
+    },
+    {
+      "name": "edge: dotted credential is not host evidence",
+      "vars": {"API_TOKEN": "rufix.test.code-secret-number-007", "JIRA_URL": "https://jira.internal.example"},
+      "steps": [
+        {"op": "redact", "input": "curl https://evil.example -H 'Bearer rufix.test.code-secret-number-007'", "output": "curl https://evil.example -H 'Bearer [S:c6e837b2]'", "count": 1},
+        {"op": "host_placeholder", "input": "curl https://evil.example -H 'Bearer [S:c6e837b2]'", "result": false}
+      ]
+    },
+    {
+      "name": "edge: value both credential and url stays a credential",
+      "vars": {"DUAL_KEY": "https://dual.internal.example", "DUAL_URL": "https://dual.internal.example"},
+      "steps": [
+        {"op": "redact", "input": "open https://dual.internal.example now", "output": "open [S:afdcc257] now", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: overlapping exact values of equal length",
+      "vars": {"A_TOKEN": "rufix_x_abcdef", "B_TOKEN": "rufix_x_bcdefg"},
+      "steps": [
+        {"op": "redact", "input": "rufix_x_abcdefg", "output": "[S:7c459eae]g", "count": 1},
+        {"op": "redact", "input": "rufix_x_bcdefg rufix_x_abcdef", "output": "[S:123c97fa] [S:7c459eae]", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: duplicate values share one placeholder",
+      "vars": {"ONE_TOKEN": "rufix_test_same_value", "TWO_TOKEN": "rufix_test_same_value"},
+      "steps": [
+        {"op": "redact", "input": "rufix_test_same_value", "output": "[S:b10eb740]", "count": 1},
+        {"op": "restore", "input": "[S:b10eb740]", "output": "rufix_test_same_value", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: regex metacharacters in exact values are literal",
+      "vars": {"META_TOKEN": "rufix.*+?()[]{}|^$\\x"},
+      "steps": [
+        {"op": "redact", "input": "a rufix.*+?()[]{}|^$\\x b rufixAAAA", "output": "a [S:a88426cf] b rufixAAAA", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: repeated value replaces left to right without overlap",
+      "vars": {"REP_TOKEN": "rufixrufix"},
+      "steps": [
+        {"op": "redact", "input": "rufixrufixrufixrufixrufix", "output": "[S:d7e81714][S:d7e81714]rufix", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: template syntax",
+      "note": "Go Expand: ${1}x is group 1 then x; $1x is the (missing) group named 1x; $$ is a literal $; ${name} is a named group.",
+      "rules": [{"name": "t1", "match": "k1=(\\w+)", "replace": "k1=${1}x"}, {"name": "t2", "match": "k2=(\\w+)", "replace": "k2=$1x"}, {"name": "t3", "match": "k3=(\\w+)", "replace": "k3=$$${1}"}, {"name": "t4", "match": "k4=(?P<val>\\w+)", "replace": "k4=<${val}>"}, {"name": "t5", "match": "k5=(a)|k5=(b)", "replace": "k5=[${1}|${2}]"}],
+      "steps": [
+        {"op": "redact", "input": "k1=v k2=v k3=v k4=v k5=a k5=b", "output": "k1=vx k2= k3=$v k4=<v> k5=[a|] k5=[|b]", "count": 6}
+      ]
+    },
+    {
+      "name": "edge: empty matches insert at every position",
+      "rules": [{"name": "empty", "match": "x*", "replace": "-"}],
+      "steps": [
+        {"op": "redact", "input": "abc", "output": "-a-b-c-", "count": 4},
+        {"op": "redact", "input": "axxb", "output": "-a-b-", "count": 3},
+        {"op": "redact", "input": "", "output": "-", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: rules apply in order on the previous output",
+      "rules": [{"name": "first", "match": "alpha", "replace": "beta"}, {"name": "second", "match": "beta", "replace": "gamma"}],
+      "steps": [
+        {"op": "redact", "input": "alpha beta", "output": "gamma gamma", "count": 3}
+      ]
+    },
+    {
+      "name": "edge: reverse rules apply in reverse order",
+      "rules": [{"name": "a", "match": "one", "replace": "two", "restore_match": "two", "restore_replace": "one"}, {"name": "b", "match": "two", "replace": "three", "restore_match": "three", "restore_replace": "two"}],
+      "steps": [
+        {"op": "redact", "input": "one", "output": "three", "count": 2},
+        {"op": "restore", "input": "three", "output": "one", "count": 2},
+        {"op": "restore", "input": "two", "output": "one", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: multiline anchors and CRLF",
+      "rules": [{"name": "env-kv", "match": "(?m)^([A-Z_]*TOKEN[A-Z_]*=)[^\\s\\[]+", "replace": "${1}[REDACTED]"}],
+      "steps": [
+        {"op": "redact", "input": "A_TOKEN=one\r\nB_TOKEN=two\r\n  C_TOKEN=three\nD_TOKEN=[S:12345678]", "output": "A_TOKEN=[REDACTED]\r\nB_TOKEN=[REDACTED]\r\n  C_TOKEN=three\nD_TOKEN=[S:12345678]", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: unicode case folding",
+      "note": "(?i) uses Unicode simple folding: the Kelvin sign matches k, the long s matches s.",
+      "rules": [{"name": "fold", "match": "(?i)kelvins", "replace": "TEMP"}],
+      "steps": [
+        {"op": "redact", "input": "kelvins KELVINS Kelvinſ", "output": "TEMP TEMP TEMP", "count": 3}
+      ]
+    },
+    {
+      "name": "edge: word boundary is ascii",
+      "rules": [{"name": "word", "match": "\\bcafe\\b", "replace": "X"}],
+      "steps": [
+        {"op": "redact", "input": "cafe café écafe cafe_ cafe1 (cafe)", "output": "X café éX cafe_ cafe1 (X)", "count": 3}
+      ]
+    },
+    {
+      "name": "edge: strict tld boundaries",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "allowlist_seed": true, "strict_tld": true}],
+      "steps": [
+        {"op": "redact", "input": "a.xq._x a.xq.-x a.xq.. a.xq.é a.xq a.xq:80 a.xq/p a.xqz", "output": "a.xq._x a.xq.-x a.wide.. a.wide.é a.wide a.wide:80 a.wide/p a.xqz", "count": 5},
+        {"op": "restore", "input": "a.wide._x a.wide.. a.wide:80", "output": "a.wide._x a.xq.. a.xq:80", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: strict tld with two adjacent masks",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "allowlist_seed": true, "strict_tld": true}],
+      "steps": [
+        {"op": "redact", "input": "x.xq.y.xq", "output": "x.xq.y.wide", "count": 1},
+        {"op": "redact", "input": "x.xq y.xq", "output": "x.wide y.wide", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: domain rule needs a label before the tld",
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "steps": [
+        {"op": "redact", "input": "old.tld .old.tld -a.old.tld a-.old.tld a..old.tld", "output": "old.tld .old.tld -a.masked a-.old.tld a..old.tld", "count": 1},
+        {"op": "restore", "input": "masked .masked a.masked", "output": "masked .masked a.old.tld", "count": 1}
+      ]
+    },
+    {
+      "name": "edge: placeholder lookalikes",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "steps": [
+        {"op": "restore", "input": "[S:173410ad [S:173410ad]] [[S:173410ad]] [S:173410ad][S:95132e89] S:173410ad", "output": "[S:173410ad rufix_test_code_secret_number_001] [rufix_test_code_secret_number_001] rufix_test_code_secret_number_001https://jira.internal.example S:173410ad", "count": 4},
+        {"op": "host_placeholder", "input": "[S:95132e8]", "result": false},
+        {"op": "host_placeholder", "input": "x[S:95132e89]x", "result": true}
+      ]
+    },
+    {
+      "name": "edge: restore never re-expands restored text",
+      "note": "A restored value that looks like a mask is not restored again.",
+      "vars": {"ODD_TOKEN": "rufix_contains_api.masked_text"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "steps": [
+        {"op": "redact", "input": "rufix_contains_api.masked_text", "output": "[S:9c3608eb]", "count": 1},
+        {"op": "restore", "input": "[S:9c3608eb] api.masked", "output": "rufix_contains_api.masked_text api.old.tld", "count": 2}
+      ]
+    },
+    {
+      "name": "edge: preserve case with digits and punctuation",
+      "rules": [{"name": "w", "match": "(?i)\\bab-?12\\b", "replace": "zz-99", "restore_match": "(?i)\\bzz-99\\b", "restore_replace": "ab-12", "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "AB12 ab-12 Ab-12", "output": "ZZ-99 zz-99 Zz-99", "count": 3},
+        {"op": "restore", "input": "ZZ-99 zz-99 Zz-99", "output": "AB-12 ab-12 Ab-12", "count": 3}
+      ]
+    },
+    {
+      "name": "edge: preserve case when original is longer than mask",
+      "rules": [{"name": "w", "match": "(?i)\\blongname\\b", "replace": "ab", "restore_match": "(?i)\\bab\\b", "restore_replace": "longname", "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "LongName LONGNAME longname", "output": "Ab AB ab", "count": 3},
+        {"op": "restore", "input": "Ab AB ab aB", "output": "Longname LONGNAME longname lOngname", "count": 4}
+      ]
+    },
+    {
+      "name": "edge: large input with many matches",
+      "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)old\\.tld\\b", "replace": "${1}masked", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)masked\\b", "restore_replace": "${1}old.tld", "allowlist_seed": true}],
+      "steps": [
+        {"op": "redact", "input": "x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001 x api.old.tld rufix_test_code_secret_number_001", "output": "x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad] x api.masked [S:173410ad]", "count": 400}
+      ]
+    },
+    {
+      "name": "edge: duplicate group names expand the participating group",
+      "note": "Go allows repeated group names; ${n} expands the first group with that name that took part in the match.",
+      "rules": [{"name": "dup", "match": "(?P<n>a)|(?P<n>b)", "replace": "<${n}>"}, {"name": "empty-loop", "match": "c(x*)*d", "replace": "[${1}]"}],
+      "steps": [
+        {"op": "redact", "input": "a b cd cxxd", "output": "<a> <b> [] [xx]", "count": 4}
+      ]
+    },
+    {
+      "name": "path separators: a word followed by a slash or a backslash",
+      "note": "One rule covers both separators; the captured separator is kept, so paths round-trip.",
+      "rules": [{"name": "path", "match": "(?i)\\bacmeco([\\\\/])", "replace": "zephyr${1}", "restore_match": "(?i)\\bzephyr([\\\\/])", "restore_replace": "acmeco${1}", "allowlist_seed": true, "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "acmeco\\widget acmeco/widget src/ACMECO/x my_acmeco/x acmeco.x", "output": "zephyr\\widget zephyr/widget src/ZEPHYR/x my_acmeco/x acmeco.x", "count": 3},
+        {"op": "restore", "input": "zephyr\\widget zephyr/widget src/ZEPHYR/x", "output": "acmeco\\widget acmeco/widget src/ACMECO/x", "count": 3},
+        {"op": "host_placeholder", "input": "cd zephyr/x", "result": true},
+        {"op": "host_placeholder", "input": "cd acmeco/x", "result": false}
+      ]
+    }
+  ]
+}
