@@ -24,6 +24,22 @@ fn normalize(a: std.mem.Allocator, s: []const u8, root: []const u8) ![]const u8 
     return std.mem.replaceOwned(u8, a, out, "\r\n", "\n");
 }
 
+/// Paths under {tmp} use the platform separator in plain-text output; make
+/// them slash-separated on both sides so one fixture serves every OS.
+fn portable(a: std.mem.Allocator, s: []const u8) ![]const u8 {
+    const out = try a.dupe(u8, s);
+    var i: usize = 0;
+    while (std.mem.indexOfPos(u8, out, i, "{tmp}")) |at| {
+        var j = at + "{tmp}".len;
+        while (j < out.len and out[j] != ' ' and out[j] != '\n' and out[j] != ')' and out[j] != '"') : (j += 1) {
+            // A backslash before a quote is a JSON escape, not a separator.
+            if (out[j] == '\\' and !(j + 1 < out.len and out[j + 1] == '"')) out[j] = '/';
+        }
+        i = j;
+    }
+    return out;
+}
+
 fn spawn(a: std.mem.Allocator, argv: []const []const u8, cwd: []const u8, env: *const std.process.Environ.Map, stdin: []const u8) !Result {
     const tio = std.testing.io;
     var child = try std.process.spawn(tio, .{
@@ -92,9 +108,9 @@ test "cli fixtures" {
         try argv.append(a, exe);
         for (t.array(c, "args")) |arg| try argv.append(a, try expand(a, arg.string, slash));
         const r = try spawn(a, argv.items, try os.join(a, root, "work"), &env, try expand(a, t.str(c, "stdin"), slash));
-        const stdout = try normalize(a, r.stdout, root);
-        const stderr = try normalize(a, r.stderr, root);
-        const want_out = t.str(c, "stdout");
+        const stdout = try portable(a, try normalize(a, r.stdout, root));
+        const stderr = try portable(a, try normalize(a, r.stderr, root));
+        const want_out = try portable(a, t.str(c, "stdout"));
         const same_out = std.mem.eql(u8, stdout, want_out) or
             (want_out.len > 0 and t.equalText(a, stdout, json.parseAll(a, want_out) catch .null));
         if (r.code != (t.int(c, "exit") orelse -1) or !same_out) {
@@ -105,7 +121,7 @@ test "cli fixtures" {
             t.fail(name, "stderr presence: {s}", .{stderr});
             failures += 1;
         }
-        if (c.get("stderr")) |want_err| if (!std.mem.eql(u8, stderr, want_err.string)) {
+        if (c.get("stderr")) |want_err| if (!std.mem.eql(u8, stderr, try portable(a, want_err.string))) {
             t.fail(name, "stderr {s}, want {s}", .{ stderr, want_err.string });
             failures += 1;
         };
