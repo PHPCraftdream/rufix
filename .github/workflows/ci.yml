@@ -23,7 +23,8 @@ jobs:
         shell: bash
         run: |
           zig build
-          binary=$(ls zig-out/bin/rufix zig-out/bin/rufix.exe 2>/dev/null | head -1)
+          binary=zig-out/bin/rufix
+          if [ -f zig-out/bin/rufix.exe ]; then binary=zig-out/bin/rufix.exe; fi
           size=$(wc -c < "$binary")
           echo "release binary: $size bytes"
           test "$size" -le 307200
