@@ -1,5 +1,5 @@
-//! rufix CLI, Zig build: the same commands, flags, output and exit codes as
-//! the Go build (main.go). Values and filters come from values.zig.
+//! rufix CLI: hook, install, uninstall, status, check, version, shell and
+//! filter. Values and filters come from values.zig.
 const std = @import("std");
 const json = @import("../core/json.zig");
 const engine = @import("../core/engine.zig");
@@ -64,7 +64,7 @@ const usage =
     \\
 ;
 
-// ---------- Go flag package semantics ----------
+// ---------- flags (-name, --name, -name=value; bools take true/false) ----------
 
 const FlagSpec = struct { name: []const u8, is_bool: bool };
 
