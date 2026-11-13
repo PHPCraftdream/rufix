@@ -13,47 +13,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: mlugg/setup-zig@v2
         with:
-          go-version-file: go.mod
-      - run: go generate ./internal/secretvalues
-      - run: go build ./...
-      - run: go vet ./...
-      - run: go test ./...
-      - name: Build compact release binary
+          version: 0.16.0
+      - name: Conformance fixtures, CLI scenarios and repository linter
+        run: zig build test
+      - name: Release build and size budget
         shell: bash
-        env:
-          CGO_ENABLED: "0"
         run: |
-          mkdir -p secrets/release
-          binary="secrets/release/rufix$(go env GOEXE)"
-          go build -trimpath -ldflags='-s -w -buildid=' -o "$binary" .
-          echo "RUFIX_RELEASE_BINARY=$binary" >> "$GITHUB_ENV"
-      - name: Check release size and hook behavior
-        env:
-          CGO_ENABLED: "0"
-        run: go test . -run '^TestReleaseBinarySmoke$' -count=1 -v
-
-  licenses:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      LICENSE_ALLOWLIST: MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Check license documents and third-party notices
-        run: go test . -run '^TestLicense'
-      - name: Install pinned dependency license scanner
-        run: go install github.com/google/go-licenses/v2@v2.0.1
-      - name: Check Linux dependency licenses
-        env:
-          GOOS: linux
-        run: go-licenses check ./... --include_tests --allowed_licenses="$LICENSE_ALLOWLIST"
-      - name: Check Windows dependency licenses
-        env:
-          GOOS: windows
-        run: go-licenses check ./... --include_tests --allowed_licenses="$LICENSE_ALLOWLIST"
+          zig build
+          binary=$(ls zig-out/bin/rufix zig-out/bin/rufix.exe 2>/dev/null | head -1)
+          size=$(wc -c < "$binary")
+          echo "release binary: $size bytes"
+          test "$size" -le 307200
+          "$binary" version
