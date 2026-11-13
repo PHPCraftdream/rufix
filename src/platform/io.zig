@@ -114,8 +114,15 @@ pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8,
     }
     if (windows) {
         const wp = try wide(a, path);
-        _ = _wremove(wp);
+        // A running executable cannot be deleted but can be renamed: move it
+        // aside, so the update lands while Claude Code still runs the old copy.
+        if (_wremove(wp) != 0) {
+            const old = try wide(a, try std.mem.concat(a, u8, &.{ path, ".old" }));
+            _ = _wremove(old);
+            _ = _wrename(wp, old);
+        }
         if (_wrename(try wide(a, tmp), wp) != 0) return error.RenameFailed;
+        _ = _wremove(try wide(a, try std.mem.concat(a, u8, &.{ path, ".old" })));
     } else {
         const ztmp = try a.dupeZ(u8, tmp);
         if (mode == .executable and chmod(ztmp, 0o755) != 0) return error.ChmodFailed;

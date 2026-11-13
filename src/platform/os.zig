@@ -130,10 +130,56 @@ pub fn isSep(c: u8) bool {
 }
 
 /// filepath.Join for two parts (no full Clean).
-pub fn join(a: std.mem.Allocator, base: []const u8, name: []const u8) ![]const u8 {
-    if (base.len == 0) return a.dupe(u8, name);
-    if (isSep(base[base.len - 1])) return std.mem.concat(a, u8, &.{ base, name });
-    return std.mem.concat(a, u8, &.{ base, &[_]u8{sep}, name });
+pub fn join(a: std.mem.Allocator, parent: []const u8, name: []const u8) ![]const u8 {
+    if (parent.len == 0) return a.dupe(u8, name);
+    if (isSep(parent[parent.len - 1])) return std.mem.concat(a, u8, &.{ parent, name });
+    return std.mem.concat(a, u8, &.{ parent, &[_]u8{sep}, name });
+}
+
+/// filepath.ToSlash: the platform's separators as '/' (a no-op off Windows).
+/// For paths written into text other programs read: settings, scripts, bash.
+pub fn toSlash(a: std.mem.Allocator, p: []const u8) ![]const u8 {
+    if (!windows) return p;
+    const out = try a.dupe(u8, p);
+    std.mem.replaceScalar(u8, out, '\\', '/');
+    return out;
+}
+
+/// `name` inside `directory`, slash-separated whatever the platform.
+pub fn joinSlash(a: std.mem.Allocator, directory: []const u8, name: []const u8) ![]const u8 {
+    var d = try toSlash(a, directory);
+    while (d.len > 1 and d[d.len - 1] == '/') d = d[0 .. d.len - 1];
+    if (d.len == 1 and d[0] == '/') return std.mem.concat(a, u8, &.{ "/", name });
+    return std.mem.concat(a, u8, &.{ d, "/", name });
+}
+
+/// filepath.Base: the last element, trailing separators ignored; "." for "".
+pub fn base(p: []const u8) []const u8 {
+    var s = p;
+    while (s.len > 1 and isSep(s[s.len - 1])) s = s[0 .. s.len - 1];
+    if (s.len == 0) return ".";
+    var i = s.len;
+    while (i > 0 and !isSep(s[i - 1])) i -= 1;
+    return if (i == s.len) s else s[i..];
+}
+
+/// The platform's suffix for executables ("" off Windows).
+pub const exe_suffix = if (windows) ".exe" else "";
+
+/// The file name of the executable `name` on this platform.
+pub fn exeName(a: std.mem.Allocator, name: []const u8) ![]const u8 {
+    return std.mem.concat(a, u8, &.{ name, exe_suffix });
+}
+
+/// Whether the file at `p` is the executable `name`, with or without the
+/// Windows suffix, in any letter case: settings written on one platform are
+/// read on another.
+pub fn isExecutableNamed(p: []const u8, name: []const u8) bool {
+    const b = base(p);
+    if (std.ascii.eqlIgnoreCase(b, name)) return true;
+    const suffix = ".exe";
+    return b.len == name.len + suffix.len and std.ascii.eqlIgnoreCase(b[0..name.len], name) and
+        std.ascii.eqlIgnoreCase(b[name.len..], suffix);
 }
 
 /// filepath.Dir: everything before the last separator, keeping a root.
@@ -246,6 +292,29 @@ pub fn spawnWait(a: std.mem.Allocator, argv: []const []const u8) !u8 {
     list[argv.len] = null;
     _ = execvp(list[0].?, @ptrCast(list.ptr));
     return error.SpawnFailed;
+}
+
+extern "c" fn _wremove([*:0]const u16) c_int;
+extern "c" fn _wrmdir([*:0]const u16) c_int;
+extern "c" fn unlink([*:0]const u8) c_int;
+extern "c" fn rmdir([*:0]const u8) c_int;
+
+/// Deletes a file; a missing one is not an error.
+pub fn remove(a: std.mem.Allocator, path: []const u8) !void {
+    if (!exists(a, path)) return;
+    const failed = if (windows) _wremove(try wide(a, path)) != 0 else unlink(try a.dupeZ(u8, path)) != 0;
+    if (failed) return error.RemoveFailed;
+}
+
+/// Removes a directory only when it is empty; anything else leaves it.
+pub fn removeEmptyDir(a: std.mem.Allocator, path: []const u8) void {
+    if (windows) {
+        const wp = wide(a, path) catch return;
+        _ = _wrmdir(wp);
+    } else {
+        const zp = a.dupeZ(u8, path) catch return;
+        _ = rmdir(zp);
+    }
 }
 
 /// os.MkdirAll for the directory path.

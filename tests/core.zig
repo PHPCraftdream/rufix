@@ -88,3 +88,13 @@ test "regex fixtures" {
     }
     try std.testing.expectEqual(@as(usize, 0), failures);
 }
+
+test "until_stable stops a rule that never settles" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var failed: usize = 0;
+    const specs = [_]rufix.engine.RuleSpec{.{ .name = "grow", .match = "x+", .replace = "xy", .until_stable = true }};
+    var st = rufix.engine.Store{ .gpa = a, .exact = &.{}, .rules = try rufix.engine.compileRules(a, &specs, &failed) };
+    try std.testing.expectError(error.RuleNeverSettles, st.redact("x"));
+}

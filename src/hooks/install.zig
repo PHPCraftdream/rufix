@@ -1,7 +1,6 @@
 //! settings.json merge: install, uninstall,
 //! status. Returns the summary line or an error.
 const std = @import("std");
-const builtin = @import("builtin");
 const json = @import("../core/json.zig");
 const io = @import("../platform/io.zig");
 const os = @import("../platform/os.zig");
@@ -98,33 +97,13 @@ fn unquote(a: std.mem.Allocator, q: []const u8) !?[]const u8 {
     return out.items;
 }
 
-fn toSlash(a: std.mem.Allocator, s: []const u8) ![]const u8 {
-    if (builtin.os.tag != .windows) return s;
-    const out = try a.dupe(u8, s);
-    std.mem.replaceScalar(u8, out, '\\', '/');
-    return out;
-}
-
 fn command(a: std.mem.Allocator, exe_dir: []const u8, env_files: bool) ![]const u8 {
     var cmd: []const u8 = "rufix hook";
     if (exe_dir.len > 0) {
-        var dir = try toSlash(a, exe_dir);
-        while (dir.len > 1 and dir[dir.len - 1] == '/') dir = dir[0 .. dir.len - 1];
-        const exe = if (dir.len == 1 and dir[0] == '/') "/rufix" else try std.mem.concat(a, u8, &.{ dir, "/rufix" });
-        cmd = try std.mem.concat(a, u8, &.{ try quote(a, exe), " hook" });
+        cmd = try std.mem.concat(a, u8, &.{ try quote(a, try os.joinSlash(a, exe_dir, "rufix")), " hook" });
     }
     if (env_files) cmd = try std.mem.concat(a, u8, &.{ cmd, " --env-files" });
     return cmd;
-}
-
-fn baseName(p: []const u8) []const u8 {
-    var s = p;
-    while (s.len > 1 and s[s.len - 1] == '/') s = s[0 .. s.len - 1];
-    if (s.len == 0) return ".";
-    if (std.mem.lastIndexOfScalar(u8, s, '/')) |i| {
-        if (s.len > 1) return s[i + 1 ..];
-    }
-    return s;
 }
 
 /// Exactly the commands install writes: an executable named rufix or
@@ -152,8 +131,7 @@ pub fn isRufixCommand(a: std.mem.Allocator, raw: []const u8) !bool {
         }
     }
     if (rest.len == 0 or rest[0] != ' ') return false;
-    const name = try std.ascii.allocLowerString(a, baseName(try toSlash(a, exe)));
-    if (!std.mem.eql(u8, name, "rufix") and !std.mem.eql(u8, name, "rufix.exe")) return false;
+    if (!os.isExecutableNamed(exe, "rufix")) return false;
     var args: [3][]const u8 = undefined;
     var n: usize = 0;
     var it = std.mem.tokenizeAny(u8, rest, " \t\r\n\x0b\x0c");

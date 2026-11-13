@@ -21,7 +21,14 @@ pub const RuleSpec = struct {
     allowlist_seed: bool = false,
     strict_tld: bool = false,
     preserve_case: bool = false,
+    /// Apply the rule again while it still changes the text: a match that
+    /// consumes a delimiter (`_` in `x_x`) otherwise hides the next one.
+    until_stable: bool = false,
 };
+
+/// Passes an until_stable rule may take; a rule that never settles is an
+/// error, not a hang.
+pub const max_passes = 16;
 
 /// Compiles every pattern; a pattern that fails to compile is an error
 /// naming the filter index only, never its text.
@@ -40,6 +47,7 @@ pub fn compileRules(a: std.mem.Allocator, specs: []const RuleSpec, failed: *usiz
             .allowlist_seed = s.allowlist_seed,
             .strict_tld = s.strict_tld,
             .preserve_case = s.preserve_case,
+            .until_stable = s.until_stable,
         };
         if (s.restore_match.len > 0) {
             const rev = try regex.compile(a, s.restore_match);
@@ -137,6 +145,7 @@ pub const Rule = struct {
     allowlist_seed: bool = false,
     strict_tld: bool = false,
     preserve_case: bool = false,
+    until_stable: bool = false,
 };
 
 pub const Store = struct {
@@ -159,11 +168,25 @@ pub const Store = struct {
             count += r.count;
         }
         for (st.rules) |rule| {
-            const r = try st.replaceRule(s, rule.fwd, rule.replace, rule.strict_tld, rule.preserve_case, rule.allowlist_seed);
+            const r = try st.applyRule(s, rule, rule.fwd, rule.replace, rule.allowlist_seed);
             s = r.out;
             count += r.count;
         }
         return .{ .out = s, .count = count };
+    }
+
+    /// One rule in one direction: once, or until it stops changing the text.
+    fn applyRule(st: *Store, input: []const u8, rule: Rule, p: *const vm.Program, segs: []const vm.Segment, seed: bool) !Result {
+        var s = input;
+        var count: usize = 0;
+        var pass: usize = 0;
+        while (true) : (pass += 1) {
+            if (pass == max_passes) return error.RuleNeverSettles;
+            const r = try st.replaceRule(s, p, segs, rule.strict_tld, rule.preserve_case, seed);
+            s = r.out;
+            count += r.count;
+            if (!rule.until_stable or r.count == 0) return .{ .out = s, .count = count };
+        }
     }
 
     pub fn restoreDomains(st: *Store, input: []const u8) !Result {
@@ -174,7 +197,7 @@ pub const Store = struct {
             i -= 1;
             const rule = st.rules[i];
             const rev = rule.rev orelse continue;
-            const r = try st.replaceRule(s, rev, rule.restore, rule.strict_tld, rule.preserve_case, false);
+            const r = try st.applyRule(s, rule, rev, rule.restore, false);
             s = r.out;
             count += r.count;
         }

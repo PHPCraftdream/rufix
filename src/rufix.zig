@@ -8,6 +8,7 @@ pub const hook = @import("hooks/hook.zig");
 pub const install = @import("hooks/install.zig");
 pub const shell = @import("hooks/shell.zig");
 pub const shellinstall = @import("hooks/shellinstall.zig");
+pub const modinstall = @import("hooks/modinstall.zig");
 pub const envfile = @import("platform/envfile.zig");
 pub const io = @import("platform/io.zig");
 pub const os = @import("platform/os.zig");

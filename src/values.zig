@@ -19,6 +19,9 @@
 //!         .allowlist_seed = true,
 //!         .preserve_case = true,
 //!     },
+//!
+//! `.until_stable = true` applies a rule again while it changes the text, for a
+//! match that consumes the delimiter the next match needs (`_` in `x_x`).
 
 pub const vars = .{};
 

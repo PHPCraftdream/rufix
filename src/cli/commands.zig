@@ -10,6 +10,7 @@ const os = @import("../platform/os.zig");
 const envfile = @import("../platform/envfile.zig");
 const shell = @import("../hooks/shell.zig");
 const shellinstall = @import("../hooks/shellinstall.zig");
+const modinstall = @import("../hooks/modinstall.zig");
 const values = @import("values");
 
 /// values.zig (the committed skeleton or secrets/values.zig) as engine data.
@@ -33,6 +34,7 @@ fn toSpec(comptime r: anytype) engine.RuleSpec {
     if (@hasField(T, "allowlist_seed")) s.allowlist_seed = r.allowlist_seed;
     if (@hasField(T, "strict_tld")) s.strict_tld = r.strict_tld;
     if (@hasField(T, "preserve_case")) s.preserve_case = r.preserve_case;
+    if (@hasField(T, "until_stable")) s.until_stable = r.until_stable;
     return s;
 }
 
@@ -43,10 +45,13 @@ const usage =
     \\
     \\Usage:
     \\  rufix hook [--env-files]   run as a Claude Code hook (dispatches on stdin JSON)
-    \\  rufix install [--project] [--env-files] [--shell]
+    \\  rufix install [--project] [--env-files] [--shell] [--mod]
     \\                            add hooks to ~/.claude/settings.json (default) or
     \\                            ./.claude/settings.json with --project; --shell also
-    \\                            wraps this repository's shell (.claude/settings.local.json)
+    \\                            wraps this repository's shell (.claude/settings.local.json);
+    \\                            --mod adds a mod masking your prompts and failed tool
+    \\                            output (.claude/skills/rufix); both need --project
+    \\  rufix redact [--env-files]  mask stdin to stdout (what the mod calls)
     \\  rufix uninstall [--project]
     \\  rufix status  [--project]
     \\  rufix check   [--project] [--env-files]
@@ -191,6 +196,7 @@ const settings_flags = [_]FlagSpec{
     .{ .name = "path", .is_bool = false },
     .{ .name = "env-files", .is_bool = true },
     .{ .name = "shell", .is_bool = true },
+    .{ .name = "mod", .is_bool = true },
 };
 
 const Settings = struct {
@@ -198,6 +204,7 @@ const Settings = struct {
     /// Settings of one repository (--project or --path), not the user's.
     repository: bool,
     shell: bool,
+    mod: bool,
 };
 
 fn parseSettings(a: std.mem.Allocator, args: []const []const u8) !Settings {
@@ -214,6 +221,7 @@ fn parseSettings(a: std.mem.Allocator, args: []const []const u8) !Settings {
         .o = .{ .path = path, .exe_dir = try os.exeDir(a), .env_files = f.bools.get("env-files") orelse false },
         .repository = repository,
         .shell = f.bools.get("shell") orelse false,
+        .mod = f.bools.get("mod") orelse false,
     };
 }
 
@@ -223,6 +231,7 @@ fn runSettings(a: std.mem.Allocator, action: []const u8, args: []const []const u
     // The shell prefix wraps every command Claude Code runs: it is only ever
     // installed into one repository, never into the user's settings.
     if (s.shell and !s.repository) return error.ShellNeedsProject;
+    if (s.mod and !s.repository) return error.ModNeedsProject;
     const summary = if (std.mem.eql(u8, action, "install"))
         try install.install(a, o)
     else if (std.mem.eql(u8, action, "uninstall"))
@@ -237,11 +246,18 @@ fn runSettings(a: std.mem.Allocator, action: []const u8, args: []const []const u
             const line = try shellinstall.install(a, o.path, try os.exePath(a), o.env_files);
             try out.appendSlice(a, try std.fmt.allocPrint(a, "rufix shell: {s}\n", .{line}));
         }
+        if (s.mod) {
+            const line = try modinstall.install(a, o.path, try os.exePath(a), o.env_files);
+            try out.appendSlice(a, try std.fmt.allocPrint(a, "rufix mod: {s}\n", .{line}));
+        }
     } else if (s.repository and std.mem.eql(u8, action, "uninstall")) {
         const line = try shellinstall.uninstall(a, o.path);
         if (!std.mem.eql(u8, line, "no shell prefix")) try out.appendSlice(a, try std.fmt.allocPrint(a, "rufix shell: {s}\n", .{line}));
+        const mod_line = try modinstall.uninstall(a, o.path);
+        if (!std.mem.eql(u8, mod_line, "no mod")) try out.appendSlice(a, try std.fmt.allocPrint(a, "rufix mod: {s}\n", .{mod_line}));
     } else if (s.repository and std.mem.eql(u8, action, "status")) {
         if (try shellinstall.status(a, o.path)) try out.appendSlice(a, "rufix shell: on\n");
+        if (try modinstall.status(a, o.path)) try out.appendSlice(a, "rufix mod: on\n");
     }
     try io.writeStdout(out.items);
 }
@@ -254,6 +270,15 @@ fn loadStore(a: std.mem.Allocator, env_files: bool, start: []const u8) !engine.S
         if (path.len > 0) base = try envfile.load(a, path);
     }
     return buildStore(a, try compiledVars(a, base));
+}
+
+/// Masks all of stdin as one text (multi-line rules apply), for the mod.
+fn runRedact(a: std.mem.Allocator, args: []const []const u8) !void {
+    const f = try parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }});
+    if (f.rest.len != 0) return error.UnexpectedFilterArguments;
+    var st = try loadStore(a, f.bools.get("env-files") orelse false, try os.cwd(a));
+    const r = try st.redact(try io.readStdin(a));
+    try io.writeStdout(r.out);
 }
 
 fn runFilter(a: std.mem.Allocator, args: []const []const u8) !void {
@@ -301,6 +326,7 @@ fn runCheck(a: std.mem.Allocator, args: []const []const u8) !void {
 fn message(err: anyerror) []const u8 {
     return switch (err) {
         error.ShellNeedsProject => "--shell installs into one repository only: add --project (or --path)",
+        error.ModNeedsProject => "--mod installs into one repository only: add --project (or --path)",
         error.ForeignShellPrefix => "CLAUDE_CODE_SHELL_PREFIX already points at another program; remove it first",
         error.EnvNotAnObject => "settings \"env\" is not an object; fix it by hand",
         error.HooksNotAnObject => "settings \"hooks\" is not an object; fix it by hand",
@@ -320,8 +346,7 @@ fn fatal(a: std.mem.Allocator, err: anyerror) u8 {
 
 fn isShellBinary(a: std.mem.Allocator) bool {
     const p = os.exePath(a) catch return false;
-    const base = std.fs.path.basename(p);
-    return std.ascii.eqlIgnoreCase(base, "rufix-shell") or std.ascii.eqlIgnoreCase(base, "rufix-shell.exe");
+    return os.isExecutableNamed(p, "rufix-shell");
 }
 
 fn run(a: std.mem.Allocator, args: []const []const u8) u8 {
@@ -340,6 +365,10 @@ fn run(a: std.mem.Allocator, args: []const []const u8) u8 {
     }
     if (args.len >= 1 and std.mem.eql(u8, args[0], "filter")) {
         runFilter(a, args[1..]) catch |err| return fatal(a, err);
+        return 0;
+    }
+    if (args.len >= 1 and std.mem.eql(u8, args[0], "redact")) {
+        runRedact(a, args[1..]) catch |err| return fatal(a, err);
         return 0;
     }
     if (args.len == 2 and std.mem.eql(u8, args[0], "shell")) return shell.run(a, os.exePath(a) catch "", args[1]);

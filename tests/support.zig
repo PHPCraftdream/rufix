@@ -106,6 +106,7 @@ pub fn store(a: std.mem.Allocator, c: *json.Object) !engine.Store {
             .allowlist_seed = flag(o, "allowlist_seed"),
             .strict_tld = flag(o, "strict_tld"),
             .preserve_case = flag(o, "preserve_case"),
+            .until_stable = flag(o, "until_stable"),
         });
     }
     var failed: usize = 0;
