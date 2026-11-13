@@ -72,11 +72,11 @@ test "cli fixtures" {
         std.mem.replaceScalar(u8, slash, '\\', '/');
         for ([_][]const u8{ "bin", "home", "work" }) |d| try os.mkdirAll(a, try os.join(a, root, d));
         const exe = try os.join(a, try os.join(a, root, "bin"), exe_name);
-        try io.writeFileAtomic(a, exe, binary);
+        try io.writeFileAtomic(a, exe, binary, .executable);
         if (c.get("files")) |files| for (files.object.keys.items, files.object.vals.items) |rel, content| {
             const p = try os.join(a, root, rel);
             try os.mkdirAll(a, os.dir(p));
-            try io.writeFileAtomic(a, p, content.string);
+            try io.writeFileAtomic(a, p, content.string, .data);
         };
         var env = try std.testing.environ.createMap(a);
         _ = env.swapRemove("RUFIX_ENV_FILE");

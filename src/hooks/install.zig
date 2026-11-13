@@ -194,7 +194,7 @@ fn save(a: std.mem.Allocator, path: []const u8, settings: *json.Object) !void {
     try json.write(a, &out, .{ .object = settings }, 2, 0);
     try out.append(a, '\n');
     try os.mkdirAll(a, os.dir(path));
-    try io.writeFileAtomic(a, path, out.items);
+    try io.writeFileAtomic(a, path, out.items, .data);
 }
 
 pub fn install(a: std.mem.Allocator, o: Options) ![]const u8 {

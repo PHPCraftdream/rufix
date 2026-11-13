@@ -16,9 +16,9 @@ test "install fixtures" {
         const dir = try t.tempDir(a);
         const path = try os.join(a, dir, "settings.json");
         if (c.get("initial_raw")) |raw| {
-            try io.writeFileAtomic(a, path, raw.string);
+            try io.writeFileAtomic(a, path, raw.string, .data);
         } else if (!t.isNull(c, "initial")) {
-            try io.writeFileAtomic(a, path, t.render(a, c.get("initial").?));
+            try io.writeFileAtomic(a, path, t.render(a, c.get("initial").?), .data);
         }
         for (t.array(c, "steps"), 0..) |sv, i| {
             const s = sv.object;
