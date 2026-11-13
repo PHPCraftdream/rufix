@@ -71,27 +71,62 @@ line and MCP server start-up pass through untouched. The wrapper is never
 installed globally, and it never replaces a prefix that points elsewhere.
 `rufix uninstall --project` removes it again.
 
+### Prompt and error mod (per repository)
+
+No settings hook can rewrite what the user types. A Claude Code
+[mod](https://code.claude.com/docs/en/plugins/mods/events.md) can, so in a
+repository:
+
+```bash
+rufix install --project --mod
+```
+
+writes a mod to that repository's `.claude/skills/rufix/`, which Claude Code
+loads for that project only. The mod replaces nothing itself: it hands the
+text to the binary (`rufix redact`), which applies the same direction as for
+files and shell output — masking.
+
+- **Your prompt** (`prompt.submit`): the model, the transcript and the prompt
+  history get the masked text. Slash commands pass unchanged.
+- **A failed tool's error** (`tool.call`): the error text, which no
+  PostToolUse hook ever sees, reaches the model masked — for every tool, MCP
+  included.
+- **What the engine injects itself** (`prompt.attachment`, `prompt.section`,
+  `prompt.context`): working-directory notices, `@`-mentioned files,
+  CLAUDE.md and git status.
+- **A skill's text** (`skill.prompt`) and **the task given to a subagent**
+  (`agent.spawn`).
+- **Fail-closed**: when masking fails, the prompt is not sent and the error
+  is withheld.
+
+The mod names the binary by its absolute path: re-run the command after
+moving rufix. `rufix uninstall --project` removes the mod's own files only.
+
 ## Install
 
 Requires [Zig 0.16](https://ziglang.org/download/).
 
 ```bash
-./install.sh                     # sh: Linux, macOS, Git Bash
-install.cmd                      # Windows cmd.exe (runs install.ps1)
-./install.sh --project --shell   # hooks + shell wrapper for this repository only
-./install.sh --revert            # uninstall hooks and remove the binaries
+./install.sh                          # sh: Linux, macOS, Git Bash
+install.cmd                           # Windows cmd.exe (runs install.ps1)
+./install.sh --project --shell --mod  # hooks + shell wrapper + mod for this repository
+./install.sh --revert                 # uninstall hooks, the binaries and the PATH entry
 ```
 
 The installer builds `zig build` (ReleaseSmall), copies the binary to
 `$RUFIX_BIN_DIR` (default `~/.local/bin`, on Windows
-`%LOCALAPPDATA%\rufix\bin`) and runs `rufix install` and `rufix check` from
-there, so the hook commands reference that absolute path. Every install fully
-reinstalls the rufix entries and keeps foreign hooks; `rufix status` reports
-`stale` when an entry differs from what this binary installs.
+`%LOCALAPPDATA%\rufix\bin`), makes that folder part of the PATH, and runs
+`rufix install` and `rufix check` from there, so the hook commands reference
+that absolute path. On Linux, macOS and Git Bash it adds one marked line to
+`~/.profile` (and `~/.bashrc` / `~/.zshrc` when they exist); on Windows it adds
+the folder to the user's PATH in the registry, keeping `%VARIABLE%` entries
+unexpanded. `--revert` takes both back. Every install fully reinstalls the
+rufix entries and keeps foreign hooks; `rufix status` reports `stale` when an
+entry differs from what this binary installs.
 
 Flags: `--project` (repository settings instead of `~/.claude/settings.json`),
-`--env-files` (hooks also load env files), `--shell` (needs `--project`),
-`--revert`.
+`--env-files` (hooks also load env files), `--shell` and `--mod` (both need
+`--project`), `--revert`.
 
 ## Replacement data
 
@@ -123,7 +158,9 @@ pub const rules = .{
   URL, its host with and without port and a userinfo password.
 - `rules`: RE2 syntax as in Go's `regexp` (no lookaround, `\b` is ASCII);
   `${n}` templates; `strict_tld` rejects a match followed by `.label`;
-  `preserve_case` carries the letter case into the mask and back. Unicode
+  `preserve_case` carries the letter case into the mask and back;
+  `until_stable` re-applies a rule while it still changes the text (for
+  matches that consume the delimiter the next one needs, such as `_`). Unicode
   classes (`\p{..}`) and case folding outside Latin/Greek/Cyrillic are
   rejected at build time rather than matched partially.
 
@@ -141,8 +178,9 @@ walking up from the hook's cwd → `<exe dir>/secrets` →
 
 ```
 rufix hook [--env-files]                       process hook stdin JSON
-rufix install [--project] [--env-files] [--shell]
+rufix install [--project] [--env-files] [--shell] [--mod]
 rufix uninstall [--project]
+rufix redact [--env-files]                     mask stdin to stdout (what the mod calls)
 rufix status [--project]                       installed / stale / not installed
 rufix check [--project] [--env-files]          counts + fake-pattern demo, never real values
 rufix version
@@ -155,12 +193,12 @@ the tool call; hook entries carry `onFailure: "block"`.
 
 ## What rufix does NOT protect
 
-- **User prompts, CLAUDE.md, conversation history** — they reach the model
-  before any hook.
-- **The local session transcript and local telemetry** see original output.
-- **Failed tool calls outside the shell wrapper**: without
-  `--shell`, a failing Bash command's output reaches the model unmasked, and
-  MCP error results always do.
+- **User prompts without the mod**: only `--mod` masks what you type; CLAUDE.md
+  and earlier conversation history are not masked either way.
+- **The local session transcript and local telemetry** see original output
+  (with the mod, the transcript holds your prompt masked).
+- **Failed tool calls without the mod or the shell wrapper**: a failing Bash
+  command's output and MCP error results then reach the model unmasked.
 - **`@` file mentions** bypass hooks; `CLAUDE_CODE_DISABLE_FILE_MENTIONS=1`
   turns them off.
 - **A stale binary**: re-run the installer after editing `secrets/values.zig`.

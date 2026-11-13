@@ -23,6 +23,19 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Claude Code mod per repository: `rufix install --project --mod` writes
+  `.claude/skills/rufix/`, which masks the user's prompt (`prompt.submit`)
+  and the error text of failed tools (`tool.call`) through `rufix redact`,
+  failing closed. `rufix status --project` reports it, `uninstall` removes it.
+- The mod also masks text the engine injects itself (`prompt.attachment`,
+  `prompt.section`, `prompt.context`: working-directory notices, `@`-mentions,
+  CLAUDE.md, git status), skill text (`skill.prompt`) and subagent tasks
+  (`agent.spawn`); each fails closed.
+- `until_stable` rule field: re-apply a rule while it still changes the text.
+- `rufix redact`: masks all of stdin as one text.
+- Setup scripts put the binary on the PATH (profile line on Linux/macOS/Git
+  Bash, user PATH on Windows with `%VARIABLE%` entries kept) and accept
+  `--mod`; `--revert` removes the PATH entry too.
 - Shell wrapper per repository: `rufix install --project --shell` sets
   `CLAUDE_CODE_SHELL_PREFIX` in the repository's `.claude/settings.local.json`
   to a `rufix-shell` copy of the binary. Bash tool calls run with stdout and

@@ -127,8 +127,8 @@
     },
     {
       "name": "word swap treats underscore as a boundary",
-      "note": "The rule is listed twice: a match consumes a trailing underscore, so the second word of word_word needs the second pass.",
-      "rules": [{"name": "word", "match": "(?i)(?:\\b|(_))acmeco(?:\\b|(_))", "replace": "${1}zephyr${2}", "restore_match": "(?i)(?:\\b|(_))zephyr(?:\\b|(_))", "restore_replace": "${1}acmeco${2}", "allowlist_seed": true, "preserve_case": true}, {"name": "word", "match": "(?i)(?:\\b|(_))acmeco(?:\\b|(_))", "replace": "${1}zephyr${2}", "restore_match": "(?i)(?:\\b|(_))zephyr(?:\\b|(_))", "restore_replace": "${1}acmeco${2}", "allowlist_seed": true, "preserve_case": true}],
+      "note": "until_stable applies the rule again while it changes the text: a match consumes a trailing underscore, so the second word of word_word needs another pass.",
+      "rules": [{"name": "word", "match": "(?i)(?:\\b|(_))acmeco(?:\\b|(_))", "replace": "${1}zephyr${2}", "restore_match": "(?i)(?:\\b|(_))zephyr(?:\\b|(_))", "restore_replace": "${1}acmeco${2}", "allowlist_seed": true, "preserve_case": true, "until_stable": true}],
       "steps": [
         {"op": "redact", "input": "acmeco Acmeco ACMECO AcmeCo acmeco_acmeco ACMECO_API_URL my_acmeco_client acmeco-cli \"acmeco\" acmeco.io", "output": "zephyr Zephyr ZEPHYR ZephYr zephyr_zephyr ZEPHYR_API_URL my_zephyr_client zephyr-cli \"zephyr\" zephyr.io", "count": 11},
         {"op": "redact", "input": "acmecos myacmeco acmeco2 2acmeco AcmecoClient", "output": "acmecos myacmeco acmeco2 2acmeco AcmecoClient", "count": 0},
@@ -361,6 +361,17 @@
       "rules": [{"name": "dup", "match": "(?P<n>a)|(?P<n>b)", "replace": "<${n}>"}, {"name": "empty-loop", "match": "c(x*)*d", "replace": "[${1}]"}],
       "steps": [
         {"op": "redact", "input": "a b cd cxxd", "output": "<a> <b> [] [xx]", "count": 4}
+      ]
+    },
+    {
+      "name": "path separators: a word followed by a slash or a backslash",
+      "note": "One rule covers both separators; the captured separator is kept, so paths round-trip.",
+      "rules": [{"name": "path", "match": "(?i)\\bacmeco([\\\\/])", "replace": "zephyr${1}", "restore_match": "(?i)\\bzephyr([\\\\/])", "restore_replace": "acmeco${1}", "allowlist_seed": true, "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "acmeco\\widget acmeco/widget src/ACMECO/x my_acmeco/x acmeco.x", "output": "zephyr\\widget zephyr/widget src/ZEPHYR/x my_acmeco/x acmeco.x", "count": 3},
+        {"op": "restore", "input": "zephyr\\widget zephyr/widget src/ZEPHYR/x", "output": "acmeco\\widget acmeco/widget src/ACMECO/x", "count": 3},
+        {"op": "host_placeholder", "input": "cd zephyr/x", "result": true},
+        {"op": "host_placeholder", "input": "cd acmeco/x", "result": false}
       ]
     }
   ]

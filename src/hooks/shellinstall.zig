@@ -11,17 +11,11 @@ pub const prefix_key = "CLAUDE_CODE_SHELL_PREFIX";
 pub const env_files_key = "RUFIX_ENV_FILES";
 
 pub fn shellExe(a: std.mem.Allocator, exe_dir: []const u8) ![]const u8 {
-    return os.join(a, exe_dir, if (os.windows) "rufix-shell.exe" else "rufix-shell");
+    return os.join(a, exe_dir, try os.exeName(a, "rufix-shell"));
 }
 
 fn localPath(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {
     return os.join(a, os.dir(settings_path), "settings.local.json");
-}
-
-fn slashes(a: std.mem.Allocator, p: []const u8) ![]const u8 {
-    const out = try a.dupe(u8, p);
-    std.mem.replaceScalar(u8, out, '\\', '/');
-    return out;
 }
 
 fn load(a: std.mem.Allocator, path: []const u8) !*json.Object {
@@ -71,15 +65,14 @@ pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []cons
         // Never take over somebody else's prefix.
         if (v != .string or !isOurs(v.string)) return error.ForeignShellPrefix;
     }
-    try env.put(a, prefix_key, .{ .string = try slashes(a, target) });
+    try env.put(a, prefix_key, .{ .string = try os.toSlash(a, target) });
     if (env_files) try env.put(a, env_files_key, .{ .string = "1" }) else env.remove(env_files_key);
     try save(a, path, settings);
     return std.fmt.allocPrint(a, "shell prefix set in {s}", .{path});
 }
 
 fn isOurs(prefix: []const u8) bool {
-    const base = std.fs.path.basename(prefix);
-    return std.ascii.eqlIgnoreCase(base, "rufix-shell") or std.ascii.eqlIgnoreCase(base, "rufix-shell.exe");
+    return os.isExecutableNamed(prefix, "rufix-shell");
 }
 
 pub fn uninstall(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {

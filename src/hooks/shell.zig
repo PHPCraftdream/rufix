@@ -27,16 +27,11 @@ const masked_script =
     \\exit $s
 ;
 
-fn forwardSlashes(a: std.mem.Allocator, p: []const u8) ![]const u8 {
-    const out = try a.dupe(u8, p);
-    std.mem.replaceScalar(u8, out, '\\', '/');
-    return out;
-}
-
 pub fn run(a: std.mem.Allocator, self_path: []const u8, cmd: []const u8) u8 {
     const bash = "bash";
     if (!isBashToolCall(cmd)) return os.spawnWait(a, &.{ bash, "-c", cmd }) catch failed();
-    const self = forwardSlashes(a, self_path) catch return failed();
+    // bash reads the path: slash-separated, as a POSIX shell expects.
+    const self = os.toSlash(a, self_path) catch return failed();
     return os.spawnWait(a, &.{ bash, "-c", masked_script, self, cmd }) catch failed();
 }
 

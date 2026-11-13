@@ -46,6 +46,7 @@ is never a host.
 | `allowlist_seed` | masks of this rule count as protected-host evidence |
 | `strict_tld` | reject a match followed by `.` and a domain character (`[A-Za-z0-9_-]`) |
 | `preserve_case` | carry the match's letter case into the replacement |
+| `until_stable` | apply the rule again while it still changes the text (at most 16 passes; a rule still changing then is an error) |
 
 Regexes use RE2 syntax (Go `regexp`): no lookaround, no backreferences,
 `\b` is an ASCII word boundary, `(?i)` uses Unicode simple case folding. Templates use `${n}`; an unmatched group expands to an empty

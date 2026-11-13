@@ -7,7 +7,6 @@ const io = rufix.io;
 const os = rufix.os;
 const json = rufix.json;
 
-const exe_name = if (os.windows) "rufix.exe" else "rufix";
 
 const Result = struct { code: u8, stdout: []const u8, stderr: []const u8 };
 
@@ -17,8 +16,7 @@ fn expand(a: std.mem.Allocator, s: []const u8, root_slash: []const u8) ![]const 
 
 fn normalize(a: std.mem.Allocator, s: []const u8, root: []const u8) ![]const u8 {
     var out = try a.dupe(u8, s);
-    const slash = try a.dupe(u8, root);
-    std.mem.replaceScalar(u8, slash, '\\', '/');
+    const slash = try os.toSlash(a, root);
     const escaped = try std.mem.replaceOwned(u8, a, root, "\\", "\\\\");
     for ([_][]const u8{ escaped, root, slash }) |form| out = try std.mem.replaceOwned(u8, a, out, form, "{tmp}");
     return std.mem.replaceOwned(u8, a, out, "\r\n", "\n");
@@ -84,10 +82,9 @@ test "cli fixtures" {
     for (try t.cases(a, "cli")) |c| {
         const name = t.str(c, "name");
         const root = try t.tempDir(a);
-        const slash = try a.dupe(u8, root);
-        std.mem.replaceScalar(u8, slash, '\\', '/');
+        const slash = try os.toSlash(a, root);
         for ([_][]const u8{ "bin", "home", "work" }) |d| try os.mkdirAll(a, try os.join(a, root, d));
-        const exe = try os.join(a, try os.join(a, root, "bin"), exe_name);
+        const exe = try os.join(a, try os.join(a, root, "bin"), try os.exeName(a, "rufix"));
         try io.writeFileAtomic(a, exe, binary, .executable);
         if (c.get("files")) |files| for (files.object.keys.items, files.object.vals.items) |rel, content| {
             const p = try os.join(a, root, rel);

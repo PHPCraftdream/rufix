@@ -62,3 +62,28 @@ fn settingsMatch(a: std.mem.Allocator, path: []const u8, s: anytype) !bool {
     if (data == null) return want == .null;
     return t.equalText(a, data.?, want);
 }
+
+test "mod install writes, reports and removes only its own files" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const modinstall = rufix.modinstall;
+    const dir = try t.tempDir(a);
+    const path = try os.join(a, try os.join(a, dir, ".claude"), "settings.json");
+    try std.testing.expect(!try modinstall.status(a, path));
+    const exe = try os.join(a, try os.join(a, dir, "bin"), try os.exeName(a, "rufix"));
+    _ = try modinstall.install(a, path, exe, true);
+    try std.testing.expect(try modinstall.status(a, path));
+    const module = (try io.readFile(a, try os.join(a, try os.join(a, try modinstall.dir(a, path), "hooks"), "register.ts"))).?;
+    // The module names the binary slash-separated, followed by its arguments.
+    const argv = try std.fmt.allocPrint(a, "[\"{s}\", 'redact', '--env-files']", .{try os.toSlash(a, exe)});
+    try std.testing.expect(std.mem.indexOf(u8, module, argv) != null);
+    _ = try modinstall.uninstall(a, path);
+    try std.testing.expect(!os.exists(a, try modinstall.dir(a, path)));
+    // A folder without our marker is somebody else's: never removed.
+    const foreign = try os.join(a, try os.join(a, try modinstall.dir(a, path), "hooks"), "register.ts");
+    try os.mkdirAll(a, os.dir(foreign));
+    try io.writeFileAtomic(a, foreign, "export const register = () => {}\n", .data);
+    try std.testing.expectEqualStrings("no mod", try modinstall.uninstall(a, path));
+    try std.testing.expect(os.exists(a, foreign));
+}

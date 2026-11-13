@@ -71,9 +71,17 @@ Run `zig build test` after every change.
 9. **Regex dialect = Go's RE2.** `conformance/regex` pins it. Unsupported
    syntax (Unicode classes, folding outside the tables) is a compile error,
    never a partial match.
-10. **Shell prefix is per repository.** `--shell` only with `--project` or
-    `--path`; it never overwrites a foreign `CLAUDE_CODE_SHELL_PREFIX`;
-    anything that is not a Bash tool call passes through untouched.
+10. **Shell prefix and mod are per repository.** `--shell` and `--mod` only
+    with `--project` or `--path`; the prefix never overwrites a foreign
+    `CLAUDE_CODE_SHELL_PREFIX`, anything that is not a Bash tool call passes
+    through it untouched, and uninstall removes only files carrying our marker.
+11. **Replacements go through the binary.** The mod never masks by itself:
+    it calls `rufix redact`. User input takes the read direction (masking),
+    never restore. The mod fails closed (`{ drop }`, `{ deny }`).
+12. **Paths through the platform layer.** Path joins, separators, base names
+    and the executable suffix go through `src/platform/os.zig`
+    (`join`, `dir`, `base`, `toSlash`, `joinSlash`, `exeName`,
+    `isExecutableNamed`); no OS-specific path literal anywhere else.
 
 ## Conventions
 
