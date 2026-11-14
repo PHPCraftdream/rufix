@@ -1,11 +1,12 @@
-//! Per-repository shell prefix: `rufix install --project --shell` copies
-//! this binary to rufix-shell next to it and points Claude Code's
+//! Per-repository shell prefix: `rufix install` copies the repository's
+//! binary to rufix-shell next to it and points Claude Code's
 //! CLAUDE_CODE_SHELL_PREFIX at it in the repository's
 //! .claude/settings.local.json — a personal file, since it holds a local path.
 const std = @import("std");
 const json = @import("../core/json.zig");
 const io = @import("../platform/io.zig");
 const os = @import("../platform/os.zig");
+const settingsfile = @import("settingsfile.zig");
 
 pub const prefix_key = "CLAUDE_CODE_SHELL_PREFIX";
 pub const env_files_key = "RUFIX_ENV_FILES";
@@ -18,35 +19,12 @@ fn localPath(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {
     return os.join(a, os.dir(settings_path), "settings.local.json");
 }
 
-fn load(a: std.mem.Allocator, path: []const u8) !*json.Object {
-    const data = (try io.readFile(a, path)) orelse return json.newObject(a);
-    return switch (try json.parseFirst(a, data)) {
-        .object => |o| o,
-        .null => json.newObject(a),
-        else => error.SyntaxError,
-    };
-}
-
-fn save(a: std.mem.Allocator, path: []const u8, obj: *json.Object) !void {
-    var out: std.ArrayList(u8) = .empty;
-    try json.write(a, &out, .{ .object = obj }, 2, 0);
-    try out.append(a, '\n');
-    try os.mkdirAll(a, os.dir(path));
-    try io.writeFileAtomic(a, path, out.items, .data);
-}
-
-/// Copies the running binary to rufix-shell; an identical copy in use is kept.
-fn copySelf(a: std.mem.Allocator, exe_path: []const u8, target: []const u8) !void {
-    const data = (try io.readFile(a, exe_path)) orelse return error.SelfUnreadable;
-    if (try io.readFile(a, target)) |old| {
-        if (std.mem.eql(u8, old, data)) return;
-    }
-    try io.writeFileAtomic(a, target, data, .executable);
-}
+const load = settingsfile.load;
+const save = settingsfile.save;
 
 pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []const u8, env_files: bool) ![]const u8 {
     const target = try shellExe(a, os.dir(exe_path));
-    try copySelf(a, exe_path, target);
+    try io.copyExecutable(a, exe_path, target);
     const path = try localPath(a, settings_path);
     const settings = try load(a, path);
     var env: *json.Object = undefined;

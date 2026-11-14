@@ -109,7 +109,7 @@
     },
     {
       "name": "preserve case round trip",
-      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "preserve_case": true}, {"name": "word", "match": "(?i)\\bxenon\\b", "replace": "xylophone", "restore_match": "(?i)\\bxylophone\\b", "restore_replace": "xenon", "preserve_case": true}],
+      "rules": [{"name": "tld", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)xq\\b", "replace": "${1}wide", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)wide\\b", "restore_replace": "${1}xq", "preserve_case": true}, {"name": "word", "match": "(?i)\\b(?:xenon)\\b", "replace": "xylophone", "restore_match": "(?i)\\b(?:xylophone)\\b", "restore_replace": "xenon", "preserve_case": true}],
       "steps": [
         {"op": "redact", "input": "api.xq API.XQ Api.Xq api.xQ xenon XENON Xenon XeNon", "output": "api.wide API.WIDE Api.Wide api.wIde xylophone XYLOPHONE Xylophone XyLophone", "count": 8},
         {"op": "restore", "input": "api.wide API.WIDE Api.Wide api.wIde xylophone XYLOPHONE Xylophone XyLophone", "output": "api.xq API.XQ Api.Xq api.xQ xenon XENON Xenon XeNon", "count": 8},
@@ -283,7 +283,7 @@
     },
     {
       "name": "edge: word boundary is ascii",
-      "rules": [{"name": "word", "match": "\\bcafe\\b", "replace": "X"}],
+      "rules": [{"name": "word", "match": "\\b(?:cafe)\\b", "replace": "X"}],
       "steps": [
         {"op": "redact", "input": "cafe café écafe cafe_ cafe1 (cafe)", "output": "X café éX cafe_ cafe1 (X)", "count": 3}
       ]
@@ -333,7 +333,7 @@
     },
     {
       "name": "edge: preserve case with digits and punctuation",
-      "rules": [{"name": "w", "match": "(?i)\\bab-?12\\b", "replace": "zz-99", "restore_match": "(?i)\\bzz-99\\b", "restore_replace": "ab-12", "preserve_case": true}],
+      "rules": [{"name": "w", "match": "(?i)\\b(?:ab)-?12\\b", "replace": "zz-99", "restore_match": "(?i)\\b(?:zz)-99\\b", "restore_replace": "ab-12", "preserve_case": true}],
       "steps": [
         {"op": "redact", "input": "AB12 ab-12 Ab-12", "output": "ZZ-99 zz-99 Zz-99", "count": 3},
         {"op": "restore", "input": "ZZ-99 zz-99 Zz-99", "output": "AB-12 ab-12 Ab-12", "count": 3}
@@ -341,7 +341,7 @@
     },
     {
       "name": "edge: preserve case when original is longer than mask",
-      "rules": [{"name": "w", "match": "(?i)\\blongname\\b", "replace": "ab", "restore_match": "(?i)\\bab\\b", "restore_replace": "longname", "preserve_case": true}],
+      "rules": [{"name": "w", "match": "(?i)\\b(?:longname)\\b", "replace": "ab", "restore_match": "(?i)\\b(?:ab)\\b", "restore_replace": "longname", "preserve_case": true}],
       "steps": [
         {"op": "redact", "input": "LongName LONGNAME longname", "output": "Ab AB ab", "count": 3},
         {"op": "restore", "input": "Ab AB ab aB", "output": "Longname LONGNAME longname lOngname", "count": 4}
@@ -366,7 +366,7 @@
     {
       "name": "path separators: a word followed by a slash or a backslash",
       "note": "One rule covers both separators; the captured separator is kept, so paths round-trip.",
-      "rules": [{"name": "path", "match": "(?i)\\bacmeco([\\\\/])", "replace": "zephyr${1}", "restore_match": "(?i)\\bzephyr([\\\\/])", "restore_replace": "acmeco${1}", "allowlist_seed": true, "preserve_case": true}],
+      "rules": [{"name": "path", "match": "(?i)\\b(?:acmeco)([\\\\/])", "replace": "zephyr${1}", "restore_match": "(?i)\\b(?:zephyr)([\\\\/])", "restore_replace": "acmeco${1}", "allowlist_seed": true, "preserve_case": true}],
       "steps": [
         {"op": "redact", "input": "acmeco\\widget acmeco/widget src/ACMECO/x my_acmeco/x acmeco.x", "output": "zephyr\\widget zephyr/widget src/ZEPHYR/x my_acmeco/x acmeco.x", "count": 3},
         {"op": "restore", "input": "zephyr\\widget zephyr/widget src/ZEPHYR/x", "output": "acmeco\\widget acmeco/widget src/ACMECO/x", "count": 3},

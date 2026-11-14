@@ -375,7 +375,7 @@
       "matches": [[[0, 0]], []]
     },
     {
-      "pattern": "\\bfoo\\b",
+      "pattern": "\\b(?:foo)\\b",
       "inputs": ["foo foobar barfoo (foo)"],
       "valid": true,
       "matches": [[[0, 3], [19, 22]]]

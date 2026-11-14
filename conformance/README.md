@@ -2,9 +2,8 @@
 
 Language-neutral behaviour contract for rufix. `zig build test` runs every
 case (tests/); a rewrite in any language passes when it reproduces every
-expectation. The expectations were recorded from the original Go
-implementation and are now maintained by hand: change one only together
-with the behaviour change it records.
+expectation. The expectations are maintained by hand: change one only
+together with the behaviour change it records.
 
 Each kind lives in its own folder, split into files of at most 500 lines
 (`engine/01.json`, `engine/02.json`, …); a harness reads them in name order.
@@ -76,7 +75,36 @@ for later `host_placeholder` steps in the same case).
 | `host_placeholder` | an `[S:…]` of a protected host (see `vars`), a reverse-rule match of an `allowlist_seed` rule, or a remembered forward replacement | `result` |
 | `has_domain_mask` | a reverse-rule match of an `allowlist_seed` rule | `result` |
 
-`count` is the number of replacements made.
+`count` is the number of replacements made, over all passes of an
+`until_stable` rule. Such a rule stops when a pass leaves the text as it was,
+also when that pass replaced something (a match replaced by itself); only a
+rule still changing the text after 16 passes is an error.
+
+## rules/
+
+The rule helpers of `values.zig`: `domain`, `import`, `path` and `word`, each
+making one rule from a name (`from`) and its replacement (`to`). A port that
+offers such helpers must expand them to exactly these rules. Per case:
+`helper`, `from`, `to`, then either
+
+- `rule`: the expansion, with the fields of the rules in "Shared inputs"
+  (`name`, `match`, `replace`, `restore_match`, `restore_replace` and the
+  flags that are true); and `steps` as in engine/, run on a store that holds
+  only this rule; or
+- `error: true`: the names are refused. A name is non-empty and holds only
+  ASCII letters, digits, `_`, `-` and `.` (`\b` is an ASCII boundary, so a
+  non-ASCII name would never match); a `.` is escaped in
+  patterns.
+
+| Helper | Matches | `strict_tld` | `until_stable` |
+|---|---|---|---|
+| `domain` | `*.from`, host labels kept, as `*.to` | yes | no |
+| `import` | `from.` as `to.` | no | no |
+| `path` | `from/` and `from\` as `to/` and `to\` | no | no |
+| `word` | `from` alone or glued to `_` | no | yes |
+
+All four set `allowlist_seed` and `preserve_case`, and write `(?i)\b(?:word)`
+with a group after the boundary.
 
 ## hook/
 
@@ -132,6 +160,11 @@ The binary run as a process, built with the empty skeleton values. Per case:
 `args`, `stdin`, `env`, `files` (written under a fresh temporary root
 first), then `exit`, `stdout` (JSON compared as a document when it is JSON),
 `stderr` (exact, only recorded for exit 0), `stderr_nonempty` and
-`settings` (resulting files by relative path). `{tmp}` stands for the
-temporary root, slash-separated; the binary is at `{tmp}/bin/rufix(.exe)`,
-the working directory is `{tmp}/work`, `HOME`/`USERPROFILE` is `{tmp}/home`.
+`settings` (resulting files by relative path; a seeded file is compared only
+when listed there, any other settings file must stay absent). `{tmp}` stands
+for the temporary root, slash-separated, and the executable suffix is dropped
+from outputs; the binary is at `{tmp}/bin/rufix(.exe)`, the working directory
+(the repository `install` sets up) is `{tmp}/work`, which holds a `.git`
+folder, `HOME`/`USERPROFILE` is `{tmp}/home`. `cwd` (a path relative to
+`{tmp}`, created when missing) starts the case elsewhere, such as in
+`work/pkg`, a subfolder of the repository.

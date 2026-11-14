@@ -19,6 +19,8 @@ fn normalize(a: std.mem.Allocator, s: []const u8, root: []const u8) ![]const u8 
     const slash = try os.toSlash(a, root);
     const escaped = try std.mem.replaceOwned(u8, a, root, "\\", "\\\\");
     for ([_][]const u8{ escaped, root, slash }) |form| out = try std.mem.replaceOwned(u8, a, out, form, "{tmp}");
+    // The executable suffix is the one OS-specific part of a written path.
+    if (os.exe_suffix.len > 0) out = try std.mem.replaceOwned(u8, a, out, os.exe_suffix, "");
     return std.mem.replaceOwned(u8, a, out, "\r\n", "\n");
 }
 
@@ -70,7 +72,10 @@ fn spawn(a: std.mem.Allocator, argv: []const []const u8, cwd: []const u8, env: *
 }
 
 const candidates = [_][]const u8{
-    "home/.claude/settings.json", "work/.claude/settings.json", "deep/dir/settings.json", "s.json", "bad.json",
+    "home/.claude/settings.json",
+    "work/.claude/settings.json",
+    "work/.claude/settings.local.json",
+    "work/pkg/.claude/settings.local.json",
 };
 
 test "cli fixtures" {
@@ -84,6 +89,11 @@ test "cli fixtures" {
         const root = try t.tempDir(a);
         const slash = try os.toSlash(a, root);
         for ([_][]const u8{ "bin", "home", "work" }) |d| try os.mkdirAll(a, try os.join(a, root, d));
+        // `work` is a repository root, as a real project is; a case may start
+        // in a folder below it ("cwd": "work/pkg").
+        try os.mkdirAll(a, try os.join(a, try os.join(a, root, "work"), ".git"));
+        const start = if (c.get("cwd")) |v| v.string else "work";
+        try os.mkdirAll(a, try os.join(a, root, start));
         const exe = try os.join(a, try os.join(a, root, "bin"), try os.exeName(a, "rufix"));
         try io.writeFileAtomic(a, exe, binary, .executable);
         if (c.get("files")) |files| for (files.object.keys.items, files.object.vals.items) |rel, content| {
@@ -104,7 +114,7 @@ test "cli fixtures" {
         var argv: std.ArrayList([]const u8) = .empty;
         try argv.append(a, exe);
         for (t.array(c, "args")) |arg| try argv.append(a, try expand(a, arg.string, slash));
-        const r = try spawn(a, argv.items, try os.join(a, root, "work"), &env, try expand(a, t.str(c, "stdin"), slash));
+        const r = try spawn(a, argv.items, try os.join(a, root, start), &env, try expand(a, t.str(c, "stdin"), slash));
         const stdout = try portable(a, try normalize(a, r.stdout, root));
         const stderr = try portable(a, try normalize(a, r.stderr, root));
         const want_out = try portable(a, t.str(c, "stdout"));
@@ -124,10 +134,11 @@ test "cli fixtures" {
         };
         const settings = c.get("settings");
         for (candidates) |rel| {
-            if (c.get("files")) |files| if (files.object.get(rel) != null) continue;
             const data = try io.readFile(a, try os.join(a, root, rel));
             const want = if (settings) |s| s.object.get(rel) else null;
             if (want == null) {
+                // A file the case seeded and does not mention is not ours to judge.
+                if (c.get("files")) |files| if (files.object.get(rel) != null) continue;
                 if (data != null) {
                     t.fail(name, "unexpected {s}", .{rel});
                     failures += 1;

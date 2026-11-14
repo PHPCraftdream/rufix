@@ -97,7 +97,7 @@ pub fn cwd(a: std.mem.Allocator) ![]const u8 {
     return a.dupe(u8, std.mem.span(p));
 }
 
-/// Go os.UserHomeDir: %USERPROFILE% on Windows, $HOME elsewhere.
+/// The user's home: %USERPROFILE% on Windows, $HOME elsewhere.
 pub fn home(a: std.mem.Allocator) ![]const u8 {
     return getenv(a, if (windows) "USERPROFILE" else "HOME");
 }

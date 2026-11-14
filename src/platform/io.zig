@@ -101,6 +101,15 @@ pub fn readFile(a: std.mem.Allocator, path: []const u8) !?[]u8 {
 
 extern "c" fn chmod([*:0]const u8, c_uint) c_int;
 
+/// Copies an executable; an identical copy (possibly the one running) is kept.
+pub fn copyExecutable(a: std.mem.Allocator, src: []const u8, target: []const u8) !void {
+    const data = (try readFile(a, src)) orelse return error.SelfUnreadable;
+    if (try readFile(a, target)) |old| {
+        if (std.mem.eql(u8, old, data)) return;
+    }
+    try writeFileAtomic(a, target, data, .executable);
+}
+
 pub const Mode = enum { data, executable };
 
 /// Writes through a temporary file renamed over the target. An executable

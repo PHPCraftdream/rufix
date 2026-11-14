@@ -87,3 +87,57 @@ test "mod install writes, reports and removes only its own files" {
     try std.testing.expectEqualStrings("no mod", try modinstall.uninstall(a, path));
     try std.testing.expect(os.exists(a, foreign));
 }
+
+test "local install copies the binary, ignores itself and removes only its own files" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const local = rufix.local;
+    const repo = try t.tempDir(a);
+    const running = try os.join(a, repo, "built");
+    try io.writeFileAtomic(a, running, "binary-v1", .executable);
+    try std.testing.expect(!local.status(a, repo));
+    _ = try local.install(a, repo, running);
+    try std.testing.expect(local.status(a, repo));
+    const copy = (try io.readFile(a, try local.exePath(a, repo))).?;
+    try std.testing.expectEqualStrings("binary-v1", copy);
+    // The folder ignores itself, so the binary with private values is never committed.
+    const ignore = (try io.readFile(a, try os.join(a, try local.dir(a, repo), ".gitignore"))).?;
+    try std.testing.expect(std.mem.startsWith(u8, ignore, local.ignore_marker));
+    try std.testing.expect(std.mem.endsWith(u8, ignore, "\n*\n"));
+    // A newer build replaces the copy.
+    try io.writeFileAtomic(a, running, "binary-v2", .executable);
+    _ = try local.install(a, repo, running);
+    try std.testing.expectEqualStrings("binary-v2", (try io.readFile(a, try local.exePath(a, repo))).?);
+    _ = try local.uninstall(a, repo);
+    try std.testing.expect(!os.exists(a, try local.dir(a, repo)));
+    try std.testing.expectEqualStrings("no local binaries", try local.uninstall(a, repo));
+    // A .gitignore that is not ours survives.
+    const folder = try local.dir(a, repo);
+    try os.mkdirAll(a, folder);
+    try io.writeFileAtomic(a, try os.join(a, folder, ".gitignore"), "mine\n", .data);
+    _ = try local.uninstall(a, repo);
+    try std.testing.expect(os.exists(a, try os.join(a, folder, ".gitignore")));
+}
+
+test "repositoryAbove finds the nearest .git above a folder, up to a limit" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const local = rufix.local;
+    const root = try t.tempDir(a);
+    const work = try os.join(a, root, "work");
+    const deep = try os.join(a, try os.join(a, work, "pkg"), "deep");
+    try os.mkdirAll(a, deep);
+    // Nothing between the folder and the limit.
+    try std.testing.expect(local.repositoryAbove(a, deep, root) == null);
+    // A linked worktree has .git as a file: it counts too.
+    try io.writeFileAtomic(a, try os.join(a, work, ".git"), "gitdir: elsewhere\n", .data);
+    try std.testing.expectEqualStrings(work, local.repositoryAbove(a, deep, root).?);
+    // A folder is not above itself: the repository root is where to install.
+    try std.testing.expect(local.repositoryAbove(a, work, root) == null);
+    // The nearest one wins.
+    const inner = try os.join(a, work, "pkg");
+    try os.mkdirAll(a, try os.join(a, inner, ".git"));
+    try std.testing.expectEqualStrings(inner, local.repositoryAbove(a, deep, root).?);
+}

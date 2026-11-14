@@ -113,6 +113,38 @@ pub fn store(a: std.mem.Allocator, c: *json.Object) !engine.Store {
     return .{ .gpa = a, .exact = try engine.buildExact(a, vars.items), .rules = try engine.compileRules(a, specs.items, &failed) };
 }
 
+/// Runs a case's engine steps (redact, restore, restore_domains,
+/// host_placeholder, has_domain_mask) on `st`; returns how many failed.
+pub fn runSteps(st: *engine.Store, name: []const u8, steps: []const Value) !usize {
+    var failures: usize = 0;
+    for (steps, 0..) |sv, i| {
+        const s = sv.object;
+        const op = str(s, "op");
+        const input = str(s, "input");
+        if (std.mem.eql(u8, op, "host_placeholder") or std.mem.eql(u8, op, "has_domain_mask")) {
+            const got = if (op[1] == 'o') try st.hostPlaceholder(input) else try st.hasDomainMask(input);
+            if (got != flag(s, "result")) {
+                fail(name, "step {d} {s}({s}) = {}", .{ i, op, input, got });
+                failures += 1;
+            }
+            continue;
+        }
+        const r = if (std.mem.eql(u8, op, "redact"))
+            try st.redact(input)
+        else if (std.mem.eql(u8, op, "restore"))
+            try st.restore(input)
+        else
+            try st.restoreDomains(input);
+        const want_out = str(s, "output");
+        const want_count = int(s, "count") orelse -1;
+        if (!std.mem.eql(u8, r.out, want_out) or @as(i64, @intCast(r.count)) != want_count) {
+            fail(name, "step {d} {s}({s}) = {s} [{d}], want {s} [{d}]", .{ i, op, input, r.out, r.count, want_out, want_count });
+            failures += 1;
+        }
+    }
+    return failures;
+}
+
 var tmp_counter: usize = 0;
 extern "c" fn time(?*i64) i64;
 

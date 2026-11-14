@@ -2,8 +2,8 @@
 //! status. Returns the summary line or an error.
 const std = @import("std");
 const json = @import("../core/json.zig");
-const io = @import("../platform/io.zig");
 const os = @import("../platform/os.zig");
+const settingsfile = @import("settingsfile.zig");
 
 pub const Options = struct {
     path: []const u8,
@@ -20,7 +20,8 @@ const entries = [_]Entry{
     .{ .event = "PreToolUse", .matcher = pre_matcher, .timeout = "10" },
 };
 
-/// Go strconv.Quote for the paths this tool writes.
+/// Quotes a path the way Go's strconv.Quote does: the format of the commands
+/// every version has written, which `isRufixCommand` must keep reading.
 fn quote(a: std.mem.Allocator, s: []const u8) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     try out.append(a, '"');
@@ -157,23 +158,8 @@ fn rufixEntry(a: std.mem.Allocator, item: json.Value) !bool {
     return false;
 }
 
-fn load(a: std.mem.Allocator, path: []const u8) !*json.Object {
-    const data = (try io.readFile(a, path)) orelse return json.newObject(a);
-    const v = try json.parseFirst(a, data);
-    return switch (v) {
-        .object => |o| o,
-        .null => json.newObject(a),
-        else => error.SyntaxError,
-    };
-}
-
-fn save(a: std.mem.Allocator, path: []const u8, settings: *json.Object) !void {
-    var out: std.ArrayList(u8) = .empty;
-    try json.write(a, &out, .{ .object = settings }, 2, 0);
-    try out.append(a, '\n');
-    try os.mkdirAll(a, os.dir(path));
-    try io.writeFileAtomic(a, path, out.items, .data);
-}
+const load = settingsfile.load;
+const save = settingsfile.save;
 
 pub fn install(a: std.mem.Allocator, o: Options) ![]const u8 {
     const settings = try load(a, o.path);
@@ -302,7 +288,7 @@ fn entryProblems(a: std.mem.Allocator, e: Entry, item: json.Value, base: []const
     const h = inner.array.items.items[0];
     const obj: ?*json.Object = if (h == .object) h.object else null;
     const timeout = if (obj) |o| o.get("timeout") else null;
-    // Go compares fmt.Sprint of the value, so a string "30" passes too.
+    // The value is compared as text, so a string "30" passes too.
     const timeout_ok = if (timeout) |t| switch (t) {
         .number => |n| std.mem.eql(u8, n, e.timeout),
         .string => |s| std.mem.eql(u8, s, e.timeout),

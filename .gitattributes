@@ -1,0 +1,5 @@
+# Scripts run under sh/bash on every platform, Windows checkouts included:
+# a carriage return before the newline breaks them.
+*.sh text eol=lf
+# Batch files expect CRLF.
+*.cmd text eol=crlf

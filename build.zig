@@ -11,12 +11,17 @@ pub fn build(b: *std.Build) void {
     // the empty committed skeleton is compiled, so nothing is replaced.
     const private = "secrets/values.zig";
     const has_private = if (b.build_root.handle.access(b.graph.io, private, .{})) true else |_| false;
+    // The rule type and its helpers (domain, import, path, word) are a module
+    // of their own, so values.zig can import them.
+    const rules = b.createModule(.{ .root_source_file = b.path("src/core/rules.zig") });
     const values = b.createModule(.{ .root_source_file = b.path(if (has_private) private else "src/values.zig") });
-    b.installArtifact(rufix(b, "rufix", target, optimize, values));
+    values.addImport("rules", rules);
+    b.installArtifact(rufix(b, "rufix", target, optimize, values, rules));
 
     // Tests never see private data: the CLI under test uses the skeleton.
     const skeleton = b.createModule(.{ .root_source_file = b.path("src/values.zig") });
-    const cli = rufix(b, "rufix-under-test", target, .Debug, skeleton);
+    skeleton.addImport("rules", rules);
+    const cli = rufix(b, "rufix-under-test", target, .Debug, skeleton, rules);
     const options = b.addOptions();
     options.addOptionPath("cli_exe", cli.getEmittedBin());
 
@@ -26,6 +31,7 @@ pub fn build(b: *std.Build) void {
         .optimize = .Debug,
         .link_libc = true,
     });
+    lib.addImport("rules", rules);
     const tests_module = b.createModule(.{
         .root_source_file = b.path("tests/root.zig"),
         .target = target,
@@ -46,6 +52,7 @@ fn rufix(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     values: *std.Build.Module,
+    rules: *std.Build.Module,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -55,6 +62,7 @@ fn rufix(
         .strip = optimize != .Debug,
     });
     module.addImport("values", values);
+    module.addImport("rules", rules);
     if (target.result.os.tag == .windows) module.linkSystemLibrary("shell32", .{});
     return b.addExecutable(.{ .name = name, .root_module = module });
 }

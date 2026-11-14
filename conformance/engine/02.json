@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#enginejson",
+  "cases": [
+    {
+      "name": "until_stable finishes what a consumed delimiter hid",
+      "note": "Pass 1 replaces x_ and _x (2), pass 2 the _x_ left in the middle (1), pass 3 finds nothing.",
+      "rules": [{"name": "word", "match": "(?i)(?:\\b|(_))x(?:\\b|(_))", "replace": "${1}y${2}", "restore_match": "(?i)(?:\\b|(_))y(?:\\b|(_))", "restore_replace": "${1}x${2}", "preserve_case": true, "until_stable": true}],
+      "steps": [
+        {"op": "redact", "input": "x_x_x", "output": "y_y_y", "count": 3},
+        {"op": "restore", "input": "y_y_y", "output": "x_x_x", "count": 3}
+      ]
+    },
+    {
+      "name": "without until_stable one pass is all there is",
+      "rules": [{"name": "word", "match": "(?i)(?:\\b|(_))x(?:\\b|(_))", "replace": "${1}y${2}", "preserve_case": true}],
+      "steps": [
+        {"op": "redact", "input": "x_x_x", "output": "y_x_y", "count": 2}
+      ]
+    },
+    {
+      "name": "until_stable settles when a pass changes nothing",
+      "note": "A match replaced by itself changes no text: the rule has settled after one pass, it is not an error.",
+      "rules": [{"name": "same", "match": "a", "replace": "a", "until_stable": true}],
+      "steps": [
+        {"op": "redact", "input": "banana", "output": "banana", "count": 3}
+      ]
+    }
+  ]
+}

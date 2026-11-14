@@ -146,7 +146,7 @@ pub fn run(a: std.mem.Allocator, st: *engine.Store, stdin: []const u8, out: *Out
 }
 
 /// Runs a decoded request; the CLI decodes first to learn the cwd for
-/// env-file resolution, as Go's hook does.
+/// env-file resolution.
 pub fn handle(a: std.mem.Allocator, st: *engine.Store, req: Request, out: *Output) u8 {
     return handleInner(a, st, req, out) catch |err| blocking(a, out, @errorName(err));
 }
