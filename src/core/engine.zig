@@ -11,20 +11,8 @@ pub const Exact = struct {
 
 pub const Var = struct { key: []const u8, value: []const u8 };
 
-/// A filter as written in values.zig (same fields as redact.RuleData).
-pub const RuleSpec = struct {
-    name: []const u8,
-    match: []const u8,
-    replace: []const u8,
-    restore_match: []const u8 = "",
-    restore_replace: []const u8 = "",
-    allowlist_seed: bool = false,
-    strict_tld: bool = false,
-    preserve_case: bool = false,
-    /// Apply the rule again while it still changes the text: a match that
-    /// consumes a delimiter (`_` in `x_x`) otherwise hides the next one.
-    until_stable: bool = false,
-};
+/// A filter as written in values.zig; defined with the helpers that build it.
+pub const RuleSpec = @import("rules").Rule;
 
 /// Passes an until_stable rule may take; a rule that never settles is an
 /// error, not a hang.
@@ -112,7 +100,7 @@ pub fn buildExact(a: std.mem.Allocator, vars_in: []const Var) ![]const Exact {
     }.f;
     var last_key: ?[]const u8 = null;
     for (vars) |v| {
-        // Later duplicates of a name lose, as in a Go map built first-wins.
+        // Later duplicates of a name lose: the first one wins.
         if (last_key) |k| if (std.mem.eql(u8, k, v.key)) continue;
         last_key = v.key;
         if (v.value.len == 0) continue;
@@ -183,9 +171,12 @@ pub const Store = struct {
         while (true) : (pass += 1) {
             if (pass == max_passes) return error.RuleNeverSettles;
             const r = try st.replaceRule(s, p, segs, rule.strict_tld, rule.preserve_case, seed);
+            // A match that is replaced by itself changes nothing: settled, not
+            // an endless loop that would block every tool call.
+            const changed = !std.mem.eql(u8, s, r.out);
             s = r.out;
             count += r.count;
-            if (!rule.until_stable or r.count == 0) return .{ .out = s, .count = count };
+            if (!rule.until_stable or !changed) return .{ .out = s, .count = count };
         }
     }
 
@@ -252,7 +243,8 @@ pub const Store = struct {
             const matched = s[m0..m1];
             var repl: []const u8 = undefined;
             if (strict or seed) {
-                // Go re-runs the rule on the match alone in this path.
+                // The rule runs again on the matched text alone: boundaries in
+                // the pattern see the match's own edges, not the text around it.
                 repl = try vm.replaceAll(st.gpa, p, matched, segs);
             } else {
                 var buf: std.ArrayList(u8) = .empty;

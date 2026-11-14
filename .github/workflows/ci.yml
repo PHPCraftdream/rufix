@@ -29,3 +29,24 @@ jobs:
           echo "release binary: $size bytes"
           test "$size" -le 307200
           "$binary" version
+      - name: Installer smoke test (install.sh in a scratch repository)
+        shell: bash
+        run: bash .github/smoke.sh
+      - name: Installer smoke test (install.ps1 in a scratch repository)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $repo = Join-Path $env:RUNNER_TEMP "scratch-ps"
+          New-Item -ItemType Directory -Force -Path (Join-Path $repo "pkg") | Out-Null
+          git -C $repo init -q
+          Push-Location $repo
+          & "$env:GITHUB_WORKSPACE\install.ps1"
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
+          foreach ($p in ".claude\rufix\rufix.exe", ".claude\rufix\rufix-shell.exe", ".claude\settings.local.json", ".claude\skills\rufix\hooks\register.ts") {
+            if (-not (Test-Path $p)) { throw "missing $p" }
+          }
+          $status = & ".claude\rufix\rufix.exe" status | Out-String
+          if ($status -notmatch "installed: PostToolUse, PreToolUse") { throw "unexpected status: $status" }
+          & "$env:GITHUB_WORKSPACE\install.ps1" -Revert
+          if (Test-Path ".claude\rufix") { throw "-Revert left .claude\rufix" }
+          Pop-Location

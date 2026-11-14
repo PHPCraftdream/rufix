@@ -15,28 +15,47 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 - Private values move from the skip-worktree `values.go` to
   `secrets/values.zig` (ignored by git); `src/values.zig` is the empty
   committed skeleton.
-- Setup scripts build with `zig build` and install the binary to
-  `$RUFIX_BIN_DIR` (default `~/.local/bin`, `%LOCALAPPDATA%\rufix\bin` on
-  Windows); they accept `--project`, `--env-files`, `--shell`, `--revert`
-  and reject unknown flags.
+- Installation is per repository only. The setup scripts build with
+  `zig build` and run `rufix install` in the current folder, which copies the
+  binary to `.claude/rufix/` and writes the hooks and the shell prefix to
+  `.claude/settings.local.json` and the mod to `.claude/skills/rufix/`; the
+  folders ignore themselves in git. Nothing goes to the PATH or `~/.claude`
+  any more. Flags: `--env-files`, `--revert`, `--clean-global`; `--project`,
+  `--path`, `--shell` and `--mod` are gone (everything is installed). Hooks
+  that older versions wrote to the repository's `.claude/settings.json` are
+  moved out on install and uninstall.
+- `rufix uninstall --global` and `install.sh --clean-global` remove what older
+  versions left outside repositories: their hook entries in
+  `~/.claude/settings.json`, the binaries and the PATH entry.
 - CI runs `zig build test` and a release build with a size budget.
 
 ### Added
 
-- Claude Code mod per repository: `rufix install --project --mod` writes
+- Claude Code mod per repository: `rufix install` writes
   `.claude/skills/rufix/`, which masks the user's prompt (`prompt.submit`)
   and the error text of failed tools (`tool.call`) through `rufix redact`,
-  failing closed. `rufix status --project` reports it, `uninstall` removes it.
+  failing closed. `rufix status` reports it, `uninstall` removes it.
 - The mod also masks text the engine injects itself (`prompt.attachment`,
   `prompt.section`, `prompt.context`: working-directory notices, `@`-mentions,
   CLAUDE.md, git status), skill text (`skill.prompt`) and subagent tasks
   (`agent.spawn`); each fails closed.
+- Rule helpers for `values.zig`: `rule.domain`, `rule.import`, `rule.path` and
+  `rule.word` (`const rule = @import("rules")`) build the usual reversible,
+  case-preserving rules from a real name and its replacement; the commented
+  examples in `src/values.zig` use them. Plain rules still work. The
+  expansions are pinned by `conformance/rules`.
+- `rufix install`, `status`, `check` and `uninstall` refuse in a subfolder of a
+  repository (Claude Code reads `.claude/` from the folder it starts in, so
+  it would protect nothing); `--here` sets up that folder anyway.
+- `install`, `status` and `check` report hooks of an older global install
+  that are still in `~/.claude/settings.json`.
+- Installer smoke test in CI (`.github/smoke.sh`, and `install.ps1` on
+  Windows): install twice, status, subfolder refusal, git ignoring the binary
+  and the mod, revert and `--clean-global`. `.gitattributes` keeps shell
+  scripts on LF.
 - `until_stable` rule field: re-apply a rule while it still changes the text.
 - `rufix redact`: masks all of stdin as one text.
-- Setup scripts put the binary on the PATH (profile line on Linux/macOS/Git
-  Bash, user PATH on Windows with `%VARIABLE%` entries kept) and accept
-  `--mod`; `--revert` removes the PATH entry too.
-- Shell wrapper per repository: `rufix install --project --shell` sets
+- Shell wrapper per repository: `rufix install` sets
   `CLAUDE_CODE_SHELL_PREFIX` in the repository's `.claude/settings.local.json`
   to a `rufix-shell` copy of the binary. Bash tool calls run with stdout and
   stderr masked line by line and their exit code kept, so failing commands
@@ -54,6 +73,9 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- An `until_stable` rule whose match is replaced by itself never settled:
+  after 16 passes the hook failed and blocked every tool call. A rule now
+  settles when a pass leaves the text unchanged.
 - Security: a credential containing a dot (JWT) counted as a protected
   host and opened the restore gate for foreign hosts.
 - Security: a URL's userinfo password leaked when the URL appeared with

@@ -10,9 +10,11 @@ Keep secrets and internal hosts out of the model context in Claude Code.
 dependencies) that acts as a pair of
 [Claude Code hooks](https://code.claude.com/docs/en/hooks): it redacts tool
 output before it reaches the model, and restores placeholders in commands and
-local file edits that legitimately target your internal hosts. Optionally it
-also wraps the shell of chosen repositories, so even the output of a failing
-command is redacted. The installer is built into the binary.
+local file edits that legitimately target your internal hosts. It also wraps
+the repository's shell, so even the output of a failing command is redacted,
+and masks your prompts through a mod. It installs into one repository at a
+time — the folder you run the installer in — and nowhere else: no PATH entry,
+nothing in `~/.claude`. The installer is built into the binary.
 
 ## Why
 
@@ -53,38 +55,38 @@ The PreToolUse matcher is the regex
 reads a matcher of plain names and `|` as exact names, so a bare `mcp__` would
 match no MCP tool.
 
-### Shell wrapper (per repository)
+### What `rufix install` writes
+
+Run in a repository, `rufix install` writes only inside its `.claude/`:
+
+| Path | Content |
+|---|---|
+| `.claude/rufix/` | a copy of the binary, its `rufix-shell` twin and a `.gitignore` that ignores the folder (the binary holds your private values: it must never be committed) |
+| `.claude/settings.local.json` | the two hooks and `CLAUDE_CODE_SHELL_PREFIX` — the personal settings file, since they name this machine's binary |
+| `.claude/skills/rufix/` | the mod, with its own `.gitignore` |
+
+Hooks left in the shared `.claude/settings.json` by older versions are moved
+out. `rufix uninstall` takes it all out again and leaves foreign entries,
+settings and folders alone.
+
+### Shell wrapper
 
 PostToolUse runs only for successful tools, so the output of a Bash command
-that exits non-zero would reach the model unmasked. In a repository:
-
-```bash
-rufix install --project --shell
-```
-
-copies the binary to `rufix-shell` next to itself and sets
-`CLAUDE_CODE_SHELL_PREFIX` in that repository's `.claude/settings.local.json`.
-Claude Code then runs every shell command through `rufix-shell`: Bash tool
+that exits non-zero would reach the model unmasked. `CLAUDE_CODE_SHELL_PREFIX`
+makes Claude Code run every shell command through `rufix-shell`: Bash tool
 calls (recognised by Claude Code's shell-snapshot preamble) run with stdout
 and stderr masked line by line and their exit code kept; hooks, the status
-line and MCP server start-up pass through untouched. The wrapper is never
-installed globally, and it never replaces a prefix that points elsewhere.
-`rufix uninstall --project` removes it again.
+line and MCP server start-up pass through untouched. It never replaces a
+prefix that points elsewhere.
 
-### Prompt and error mod (per repository)
+### Prompt and error mod
 
 No settings hook can rewrite what the user types. A Claude Code
-[mod](https://code.claude.com/docs/en/plugins/mods/events.md) can, so in a
-repository:
-
-```bash
-rufix install --project --mod
-```
-
-writes a mod to that repository's `.claude/skills/rufix/`, which Claude Code
-loads for that project only. The mod replaces nothing itself: it hands the
-text to the binary (`rufix redact`), which applies the same direction as for
-files and shell output — masking.
+[mod](https://code.claude.com/docs/en/plugins/mods/events.md) can, so the
+install writes one to `.claude/skills/rufix/`, which Claude Code loads for
+that project only. The mod replaces nothing itself: it hands the text to the
+binary (`rufix redact`), which applies the same direction as for files and
+shell output — masking.
 
 - **Your prompt** (`prompt.submit`): the model, the transcript and the prompt
   history get the masked text. Slash commands pass unchanged.
@@ -99,70 +101,97 @@ files and shell output — masking.
 - **Fail-closed**: when masking fails, the prompt is not sent and the error
   is withheld.
 
-The mod names the binary by its absolute path: re-run the command after
-moving rufix. `rufix uninstall --project` removes the mod's own files only.
+The mod, the hooks and the shell prefix name the repository's copy of the
+binary by its absolute path: re-run the installer after moving the repository.
 
 ## Install
 
-Requires [Zig 0.16](https://ziglang.org/download/).
+Requires [Zig 0.16](https://ziglang.org/download/). Run the installer **from
+the repository you want protected**:
 
 ```bash
-./install.sh                          # sh: Linux, macOS, Git Bash
-install.cmd                           # Windows cmd.exe (runs install.ps1)
-./install.sh --project --shell --mod  # hooks + shell wrapper + mod for this repository
-./install.sh --revert                 # uninstall hooks, the binaries and the PATH entry
+cd /path/to/your/repo
+/path/to/rufix/install.sh                  # sh: Linux, macOS, Git Bash
+C:\path\to\rufix\install.cmd               # Windows cmd.exe (runs install.ps1)
+/path/to/rufix/install.sh --revert         # take everything out of this repository
+/path/to/rufix/install.sh --clean-global   # one-off, see below
 ```
 
-The installer builds `zig build` (ReleaseSmall), copies the binary to
-`$RUFIX_BIN_DIR` (default `~/.local/bin`, on Windows
-`%LOCALAPPDATA%\rufix\bin`), makes that folder part of the PATH, and runs
-`rufix install` and `rufix check` from there, so the hook commands reference
-that absolute path. On Linux, macOS and Git Bash it adds one marked line to
-`~/.profile` (and `~/.bashrc` / `~/.zshrc` when they exist); on Windows it adds
-the folder to the user's PATH in the registry, keeping `%VARIABLE%` entries
-unexpanded. `--revert` takes both back. Every install fully reinstalls the
-rufix entries and keeps foreign hooks; `rufix status` reports `stale` when an
-entry differs from what this binary installs.
+The installer builds with `zig build` (ReleaseSmall) in the rufix folder, runs
+`rufix install` in your folder and then `rufix check` on the copy it made
+there. Every install fully reinstalls the rufix entries and keeps foreign
+hooks; `rufix status` reports `stale` when an entry differs from what this
+binary installs. Flag: `--env-files` (hooks also load env files).
 
-Flags: `--project` (repository settings instead of `~/.claude/settings.json`),
-`--env-files` (hooks also load env files), `--shell` and `--mod` (both need
-`--project`), `--revert`.
+Run it in the repository's root, the folder that holds `.git`: Claude Code
+reads `.claude/` from the folder it starts in. In a subfolder of a repository
+rufix refuses (`rufix install --here` sets up that folder anyway, for a
+package with its own `.claude/`); `status`, `check` and `uninstall` refuse
+alike.
+
+### Coming from a global install
+
+Older versions put the binary on the PATH and the hooks into
+`~/.claude/settings.json`. `install.sh --clean-global` (`-CleanGlobal` in
+`install.ps1`) removes exactly that — the hook entries that are rufix's, the
+binaries in `$RUFIX_BIN_DIR` (default `~/.local/bin`, on Windows
+`%LOCALAPPDATA%\rufix\bin`) and the PATH entry — and leaves everything else.
+Do it after re-running the installer in the repositories that used the global
+binary: their hooks call it, and a missing binary blocks every tool call.
+While such hooks remain, `install`, `status` and `check` say so (`rufix
+global: older hooks are still in …`): they would run beside the repository's
+own.
 
 ## Replacement data
 
 Your values and filters live in `secrets/values.zig` (git ignores `secrets/`);
-without it the empty committed skeleton `src/values.zig` is compiled and
-nothing is replaced. Same shape as the skeleton:
+without it the committed skeleton `src/values.zig` is compiled and nothing is
+replaced. The skeleton holds commented examples with fake names: copy them
+into your file. Same shape as the skeleton:
 
 ```zig
+const rule = @import("rules");
+
 pub const vars = .{
     .{ "JIRA_TOKEN", "..." },
     .{ "JIRA_URL", "https://jira.example.com" },
 };
 
 pub const rules = .{
-    .{
-        .name = "com-to-intra",
-        .match = "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)com\\b",
-        .replace = "${1}intra",
-        .restore_match = "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)intra\\b",
-        .restore_replace = "${1}com",
-        .allowlist_seed = true,
-        .preserve_case = true,
-    },
+    rule.domain("acme", "zephyr"),
+    rule.import("acme", "zephyr"),
+    rule.path("acme", "zephyr"),
+    rule.word("acme", "zephyr"),
 };
 ```
 
 - `vars`: names with `TOKEN`/`SECRET`/`PASSWORD`/`PASSWD`/`PAT`/`KEY`/
   `CREDENTIAL` parts protect the whole value (6+ bytes); URL values protect the
   URL, its host with and without port and a userinfo password.
-- `rules`: RE2 syntax as in Go's `regexp` (no lookaround, `\b` is ASCII);
-  `${n}` templates; `strict_tld` rejects a match followed by `.label`;
-  `preserve_case` carries the letter case into the mask and back;
-  `until_stable` re-applies a rule while it still changes the text (for
-  matches that consume the delimiter the next one needs, such as `_`). Unicode
-  classes (`\p{..}`) and case folding outside Latin/Greek/Cyrillic are
-  rejected at build time rather than matched partially.
+- `rules`: each helper takes the real name and what the model sees, and makes
+  one reversible rule that keeps the letter case and counts as
+  protected-host evidence (`src/core/rules.zig`):
+
+  | Helper | Makes | Example |
+  |---|---|---|
+  | `domain(from, to)` | `*.from` → `*.to` (`a.from.org` stays) | `api.acme` → `api.zephyr` |
+  | `import(from, to)` | `from.` → `to.`, the first part of a dotted name | `acme.io` → `zephyr.io` |
+  | `path(from, to)` | `from/` and `from\` → `to/` and `to\` | `acme/src` → `zephyr/src` |
+  | `word(from, to)` | the bare word, also glued to `_` | `my_acme` → `my_zephyr` |
+
+  A name holds ASCII letters, digits, `_`, `-` and `.`; anything else is a
+  build error. Non-ASCII names are refused on purpose: `\b` is an ASCII
+  boundary, so such a rule would compile and then never match.
+- Anything else is a plain rule, `.{ .name, .match, .replace }` plus the
+  optional `.restore_match`, `.restore_replace`, `.allowlist_seed`,
+  `.strict_tld`, `.preserve_case` and `.until_stable` (see the skeleton): RE2
+  syntax as in Go's `regexp` (no lookaround, `\b` is ASCII); `${n}` templates;
+  `strict_tld` rejects a match followed by `.label`; `preserve_case` carries the
+  letter case into the mask and back; `until_stable` re-applies a rule while it
+  still changes the text (for matches that consume the delimiter the next one
+  needs, such as `_`). Unicode classes (`\p{..}`) and case folding outside
+  Latin/Greek/Cyrillic are rejected at build time rather than matched
+  partially.
 
 Values are compiled into the binary: **never distribute the executable**.
 Rebuild (re-run the installer) after editing the file.
@@ -178,11 +207,12 @@ walking up from the hook's cwd → `<exe dir>/secrets` →
 
 ```
 rufix hook [--env-files]                       process hook stdin JSON
-rufix install [--project] [--env-files] [--shell] [--mod]
-rufix uninstall [--project]
+rufix install [--env-files] [--here]           set up the current folder (copy, hooks, shell, mod)
+rufix uninstall                                take that out of the current folder
+rufix uninstall --global                       one-off: remove old hooks from ~/.claude
 rufix redact [--env-files]                     mask stdin to stdout (what the mod calls)
-rufix status [--project]                       installed / stale / not installed
-rufix check [--project] [--env-files]          counts + fake-pattern demo, never real values
+rufix status                                   installed / stale / not installed
+rufix check [--env-files]                      counts + fake-pattern demo, never real values
 rufix version
 ```
 
@@ -193,12 +223,16 @@ the tool call; hook entries carry `onFailure: "block"`.
 
 ## What rufix does NOT protect
 
-- **User prompts without the mod**: only `--mod` masks what you type; CLAUDE.md
-  and earlier conversation history are not masked either way.
+- **Repositories you did not run the installer in**: protection is per
+  repository, and there is no global fallback. Prompts are masked only where
+  the mod is installed; CLAUDE.md and earlier conversation history are not
+  masked either way.
 - **The local session transcript and local telemetry** see original output
   (with the mod, the transcript holds your prompt masked).
-- **Failed tool calls without the mod or the shell wrapper**: a failing Bash
-  command's output and MCP error results then reach the model unmasked.
+- **Failed tool calls when the mod or the shell wrapper is switched off**
+  (for instance a foreign `CLAUDE_CODE_SHELL_PREFIX` blocks the wrapper): a
+  failing Bash command's output and MCP error results then reach the model
+  unmasked.
 - **`@` file mentions** bypass hooks; `CLAUDE_CODE_DISABLE_FILE_MENTIONS=1`
   turns them off.
 - **A stale binary**: re-run the installer after editing `secrets/values.zig`.
@@ -212,7 +246,7 @@ zig build           # release binary in zig-out/bin
 ```
 
 [conformance/](conformance/README.md) holds the behaviour contract as JSON
-fixtures (engine, hook, installer, regex dialect, CLI). The linter keeps every
+fixtures (engine, rule helpers, hook, installer, regex dialect, CLI). The linter keeps every
 file at most 500 lines and every folder except the root at most 7 entries.
 See [AGENTS.md](AGENTS.md) for architecture and invariants.
 

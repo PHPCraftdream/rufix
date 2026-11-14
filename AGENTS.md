@@ -21,8 +21,11 @@ src/main.zig              entry point
 src/rufix.zig             library root for the tests
 src/values.zig            committed EMPTY skeleton of values and filters
 src/cli/                  commands, flags, usage (main logic of the CLI)
-src/core/                 engine, URL parser, Pike VM, JSON, regex/
-src/hooks/                hook contract, shell prefix, settings.json installers
+src/core/                 engine, URL parser, Pike VM, JSON, regex/, rules.zig
+                          (the rule type and the domain/import/path/word helpers;
+                          a module of its own, "rules", imported by values.zig)
+src/hooks/                hook contract, shell prefix, mod, local binary copy,
+                          settings.json installers (settingsfile.zig: read/write)
 src/platform/             C-runtime I/O, OS access (paths, env, spawn), env files
 tests/                    zig build test: fixtures, CLI scenarios, linter
 conformance/              behaviour contract as JSON fixtures (see its README)
@@ -61,7 +64,8 @@ Run `zig build test` after every change.
    must stay a regex. Widening the allowlist needs an explicit task.
 5. **Values are data — P0.** The engine ships zero rules and zero values.
    Private data lives in `secrets/values.zig` (ignored); `src/values.zig`
-   stays empty. An engine change required by a new filter is a P0 blocker —
+   has no active value or rule, only commented examples with fake names. The
+   rule helpers (`src/core/rules.zig`) hold shapes, never names. An engine change required by a new filter is a P0 blocker —
    extend `RuleSpec` instead.
 6. **No secrets in output.** `check` / `status` print counts and fake-pattern
    demos only. Errors name a filter index, never its text.
@@ -71,10 +75,16 @@ Run `zig build test` after every change.
 9. **Regex dialect = Go's RE2.** `conformance/regex` pins it. Unsupported
    syntax (Unicode classes, folding outside the tables) is a compile error,
    never a partial match.
-10. **Shell prefix and mod are per repository.** `--shell` and `--mod` only
-    with `--project` or `--path`; the prefix never overwrites a foreign
-    `CLAUDE_CODE_SHELL_PREFIX`, anything that is not a Bash tool call passes
-    through it untouched, and uninstall removes only files carrying our marker.
+10. **Everything is per repository.** `rufix install` works on the current
+    folder only: binary copy in `.claude/rufix/`, hooks and shell prefix in
+    `.claude/settings.local.json`, mod in `.claude/skills/rufix/`. It never
+    touches the user's PATH or `~/.claude` (`uninstall --global` only removes
+    what older versions left there). Folders holding the binary or machine
+    paths carry a self-ignoring `.gitignore`. In a subfolder of a repository
+    the commands refuse unless `--here` is given. The prefix never overwrites a
+    foreign `CLAUDE_CODE_SHELL_PREFIX`, anything that is not a Bash tool call
+    passes through it untouched, and uninstall removes only files carrying
+    our marker.
 11. **Replacements go through the binary.** The mod never masks by itself:
     it calls `rufix redact`. User input takes the read direction (masking),
     never restore. The mod fails closed (`{ drop }`, `{ deny }`).
@@ -87,8 +97,16 @@ Run `zig build test` after every change.
 
 - English everywhere: code, comments, docs, tool output, commit messages.
 - Comments explain why, not what.
+- In regex strings (rules, fixtures, docs) a word after a boundary goes into
+  a group: `\\b(?:word)`, never `\\bword` — the `b` fuses with the word and
+  editors stop highlighting it on selection. Not needed where the next
+  character is not a letter (`\\b(`, `\\b|`).
 - Every file at most 500 lines, every folder except the root at most 7
   entries — `tests/lint.zig` enforces it.
+- The rule helpers have fixtures too (`conformance/rules`): change the
+  templates in `src/core/rules.zig` and the fixtures together. `build`
+  (compile time, for values.zig) and `expand` (run time, for fixtures) render
+  the same pieces; the tests check they agree.
 - A behaviour change updates `conformance/` in the same change; never edit
   expectations to make a failing change pass.
 - CLI text is lowercase-terse; errors to stderr, data to stdout.
@@ -102,5 +120,7 @@ Run `zig build test` after every change.
 
 ## CI
 
-`.github/workflows/ci.yml` runs `zig build test` and a release build with a
-size budget on Ubuntu and Windows.
+`.github/workflows/ci.yml` runs `zig build test`, a release build with a
+size budget and the installer smoke test (`.github/smoke.sh`, plus
+`install.ps1` on Windows) on Ubuntu and Windows. A change to the installers
+or to what `rufix install` writes needs `bash .github/smoke.sh` to stay green.

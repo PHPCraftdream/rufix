@@ -9,5 +9,5 @@ secrets/
 .zig-cache/
 zig-out/
 
-# Local Claude Code setup written by `rufix install --project`: holds machine paths
+# Local Claude Code setup written by `rufix install`: holds machine paths
 .claude/

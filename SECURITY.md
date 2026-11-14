@@ -21,7 +21,7 @@ description and, if possible, a minimal reproduction.
   prompts and CLAUDE.md content are out of scope (filter at the proxy layer).
 - Failed tool calls bypass the hooks: PostToolUse fires only on success, and
   `PostToolUseFailure` cannot rewrite the error text. The shell prefix
-  (`rufix install --project --shell`) closes this for Bash in the repositories
+  (set up by `rufix install`) closes this for Bash in the repositories
   where it is installed; MCP error results and `@` file mentions stay
   uncovered. See "What rufix does NOT protect" in the README.
 - The committed `src/values.zig` must stay empty; private data belongs in

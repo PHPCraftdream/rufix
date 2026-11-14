@@ -1,4 +1,4 @@
-//! Per-repository Claude Code mod: `rufix install --project --mod` writes a
+//! Per-repository Claude Code mod: `rufix install` writes a
 //! plugin into the repository's .claude/skills/rufix/, which Claude Code
 //! loads for that project only. The mod masks what no settings hook can:
 //! the user's own prompt (prompt.submit), the error text of a failed tool
@@ -9,9 +9,13 @@ const std = @import("std");
 const io = @import("../platform/io.zig");
 const os = @import("../platform/os.zig");
 const json = @import("../core/json.zig");
+const local = @import("local.zig");
 
 /// Marks the files as ours, so uninstall never removes a folder it did not write.
-pub const marker = "Written by `rufix install --project --mod`";
+pub const marker = detect ++ "`";
+
+/// What uninstall looks for: older versions wrote `rufix install --project --mod`.
+const detect = "Written by `rufix install";
 
 const manifest =
     \\{
@@ -146,6 +150,8 @@ pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []cons
     try io.writeFileAtomic(a, try os.join(a, plugin_dir, "plugin.json"), manifest, .data);
     try io.writeFileAtomic(a, try os.join(a, hooks_dir, "hooks.json"), hooks_json, .data);
     try io.writeFileAtomic(a, try os.join(a, hooks_dir, "register.ts"), try moduleSource(a, exe_path, env_files), .data);
+    // The module holds this machine's binary path: keep it out of commits.
+    try local.writeIgnore(a, root);
     return std.fmt.allocPrint(a, "mod written to {s}", .{root});
 }
 
@@ -156,7 +162,7 @@ fn module(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {
 /// True when the repository holds the mod this binary writes.
 pub fn status(a: std.mem.Allocator, settings_path: []const u8) !bool {
     const data = try io.readFile(a, try module(a, settings_path)) orelse return false;
-    return std.mem.indexOf(u8, data, marker) != null;
+    return std.mem.indexOf(u8, data, detect) != null;
 }
 
 /// Removes the three files written by install, and the folders if they end
@@ -171,6 +177,7 @@ pub fn uninstall(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {
     };
     for (files) |f| try os.remove(a, try os.join(a, try os.join(a, root, f[0]), f[1]));
     for ([_][]const u8{ "hooks", ".claude-plugin" }) |sub| os.removeEmptyDir(a, try os.join(a, root, sub));
+    local.removeIgnore(a, root);
     os.removeEmptyDir(a, root);
     os.removeEmptyDir(a, os.dir(root)); // .claude/skills, when only the mod was there
     return std.fmt.allocPrint(a, "mod removed from {s}", .{root});

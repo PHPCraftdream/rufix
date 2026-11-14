@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "spec": "conformance/README.md#rulesjson",
+  "cases": [
+    {
+      "name": "domain: the last label",
+      "note": "x.acme.org stays: acme is not its last label (strict_tld).",
+      "helper": "domain", "from": "acme", "to": "zephyr",
+      "rule": {"name": "domain acme", "match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)acme\\b", "replace": "${1}zephyr", "restore_match": "(?i)\\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+)zephyr\\b", "restore_replace": "${1}acme", "allowlist_seed": true, "strict_tld": true, "preserve_case": true},
+      "steps": [
+        {"op": "redact", "input": "api.acme x.acme.org HOST.ACME acme.example", "output": "api.zephyr x.acme.org HOST.ZEPHYR acme.example", "count": 2},
+        {"op": "restore", "input": "api.zephyr HOST.ZEPHYR", "output": "api.acme HOST.ACME", "count": 2},
+        {"op": "host_placeholder", "input": "curl api.zephyr/x", "result": true},
+        {"op": "host_placeholder", "input": "curl api.acme/x", "result": false}
+      ]
+    },
+    {
+      "name": "import: the first part of a dotted name",
+      "helper": "import", "from": "acme", "to": "zephyr",
+      "rule": {"name": "import acme", "match": "(?i)\\b(?:acme)\\.", "replace": "zephyr.", "restore_match": "(?i)\\b(?:zephyr)\\.", "restore_replace": "acme.", "allowlist_seed": true, "preserve_case": true},
+      "steps": [
+        {"op": "redact", "input": "import acme.io; ACME.Io; macme.io; acme", "output": "import zephyr.io; ZEPHYR.Io; macme.io; acme", "count": 2},
+        {"op": "restore", "input": "import zephyr.io; ZEPHYR.Io", "output": "import acme.io; ACME.Io", "count": 2},
+        {"op": "host_placeholder", "input": "cd zephyr.io", "result": true},
+        {"op": "host_placeholder", "input": "cd acme.io", "result": false}
+      ]
+    },
+    {
+      "name": "path: either separator",
+      "helper": "path", "from": "acme", "to": "zephyr",
+      "rule": {"name": "path acme", "match": "(?i)\\b(?:acme)([\\\\/])", "replace": "zephyr${1}", "restore_match": "(?i)\\b(?:zephyr)([\\\\/])", "restore_replace": "acme${1}", "allowlist_seed": true, "preserve_case": true},
+      "steps": [
+        {"op": "redact", "input": "acme/src ACME\\lib lacme/x acme.x", "output": "zephyr/src ZEPHYR\\lib lacme/x acme.x", "count": 2},
+        {"op": "restore", "input": "zephyr/src ZEPHYR\\lib", "output": "acme/src ACME\\lib", "count": 2},
+        {"op": "host_placeholder", "input": "cd zephyr/x", "result": true},
+        {"op": "host_placeholder", "input": "cd acme/x", "result": false}
+      ]
+    },
+    {
+      "name": "word: alone or glued to an underscore",
+      "note": "A match consumes the underscore the next one needs: acme_acme takes two passes. Pass 1 makes 4 replacements, pass 2 one.",
+      "helper": "word", "from": "acme", "to": "zephyr",
+      "rule": {"name": "word acme", "match": "(?i)(?:\\b|(_))acme(?:\\b|(_))", "replace": "${1}zephyr${2}", "restore_match": "(?i)(?:\\b|(_))zephyr(?:\\b|(_))", "restore_replace": "${1}acme${2}", "allowlist_seed": true, "preserve_case": true, "until_stable": true},
+      "steps": [
+        {"op": "redact", "input": "acme my_acme acmes xacme acme_acme ACME", "output": "zephyr my_zephyr acmes xacme zephyr_zephyr ZEPHYR", "count": 5},
+        {"op": "restore", "input": "zephyr my_zephyr acmes xacme zephyr_zephyr ZEPHYR", "output": "acme my_acme acmes xacme acme_acme ACME", "count": 5},
+        {"op": "host_placeholder", "input": "cd my_zephyr", "result": true},
+        {"op": "host_placeholder", "input": "cd my_acme", "result": false}
+      ]
+    },
+    {
+      "name": "word: a dot in a name is a dot",
+      "helper": "word", "from": "a.b", "to": "c",
+      "rule": {"name": "word a.b", "match": "(?i)(?:\\b|(_))a\\.b(?:\\b|(_))", "replace": "${1}c${2}", "restore_match": "(?i)(?:\\b|(_))c(?:\\b|(_))", "restore_replace": "${1}a.b${2}", "allowlist_seed": true, "preserve_case": true, "until_stable": true},
+      "steps": [
+        {"op": "redact", "input": "axb a.b", "output": "axb c", "count": 1},
+        {"op": "restore", "input": "axb c", "output": "axb a.b", "count": 1}
+      ]
+    },
+    {
+      "name": "import: dash, underscore and digit in names",
+      "helper": "import", "from": "acme-co", "to": "zephyr_1",
+      "rule": {"name": "import acme-co", "match": "(?i)\\b(?:acme-co)\\.", "replace": "zephyr_1.", "restore_match": "(?i)\\b(?:zephyr_1)\\.", "restore_replace": "acme-co.", "allowlist_seed": true, "preserve_case": true},
+      "steps": [
+        {"op": "redact", "input": "use acme-co.io", "output": "use zephyr_1.io", "count": 1},
+        {"op": "restore", "input": "use zephyr_1.io", "output": "use acme-co.io", "count": 1}
+      ]
+    },
+    {
+      "name": "a space in a name is refused",
+      "helper": "word", "from": "a b", "to": "c", "error": true
+    },
+    {
+      "name": "a regex character in a name is refused",
+      "helper": "domain", "from": "a(b", "to": "c", "error": true
+    },
+    {
+      "name": "a non-ASCII name is refused",
+      "note": "\\b is an ASCII boundary: a rule around such a word would never match.",
+      "helper": "word", "from": "пример", "to": "c", "error": true
+    },
+    {
+      "name": "an empty from is refused",
+      "helper": "import", "from": "", "to": "c", "error": true
+    },
+    {
+      "name": "an empty to is refused",
+      "helper": "path", "from": "acme", "to": "", "error": true
+    }
+  ]
+}

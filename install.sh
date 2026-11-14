@@ -1,93 +1,75 @@
 #!/usr/bin/env sh
-# rufix setup: build the release binary with Zig, install it on the PATH,
-# register the hooks.
+# rufix setup for ONE repository: run it from that repository's folder.
+# It builds the release binary with Zig and runs `rufix install` there, which
+# copies the binary to .claude/rufix/ and writes the hooks, the shell wrapper
+# and the mod into .claude/. Nothing is installed outside the folder: no PATH
+# entry, nothing in ~/.claude.
 #
-# Usage:
-#   ./install.sh               build + install the binary + hooks in ~/.claude/settings.json
-#   ./install.sh --project     same, but hooks into ./.claude/settings.json
-#   ./install.sh --env-files   hooks also load external env files (rufix hook --env-files)
-#   ./install.sh --project --shell
-#                              also wrap this repository's shell (output of failing commands)
-#   ./install.sh --project --mod
-#                              also add the mod masking prompts and failed tool output
-#   ./install.sh --revert      uninstall hooks (same scope), the binaries and the PATH line
+# Usage (from the repository to protect):
+#   /path/to/rufix/install.sh                 set up this folder
+#   /path/to/rufix/install.sh --env-files     hooks also load external env files
+#   /path/to/rufix/install.sh --revert        take everything out of this folder
+#   /path/to/rufix/install.sh --clean-global  one-off: remove what older versions
+#                                             put outside repositories (hooks in
+#                                             ~/.claude/settings.json, the binaries,
+#                                             the PATH line)
 #
-# The binary goes to $RUFIX_BIN_DIR (default ~/.local/bin), which is added to
-# the PATH through ~/.profile, ~/.bashrc and ~/.zshrc (the ones that exist,
-# ~/.profile always). Private values come from secrets/values.zig when it exists.
+# Private values come from secrets/values.zig (in the rufix folder) when it exists.
 set -e
-cd "$(dirname "$0")"
+TARGET="$(pwd)"
+SRC="$(cd "$(dirname "$0")" && pwd)"
 
-PROJECT=""
 ENVFILES=""
-SHELLWRAP=""
-MOD=""
-REVERT=0
+MODE="install"
 for arg in "$@"; do
   case "$arg" in
-    --revert) REVERT=1 ;;
-    --project) PROJECT="--project" ;;
+    --revert) MODE="revert" ;;
+    --clean-global) MODE="clean-global" ;;
     --env-files) ENVFILES="--env-files" ;;
-    --shell) SHELLWRAP="--shell" ;;
-    --mod) MOD="--mod" ;;
-    *) echo "rufix setup: unknown flag $arg (supported: --project, --env-files, --shell, --mod, --revert)" >&2; exit 1 ;;
+    *) echo "rufix setup: unknown flag $arg (supported: --env-files, --revert, --clean-global)" >&2; exit 1 ;;
   esac
 done
 
-BIN="${RUFIX_BIN_DIR:-$HOME/.local/bin}"
 EXE=""
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) EXE=".exe" ;; esac
-TARGET="$BIN/rufix$EXE"
-MARK="# rufix: binary on the PATH"
+LOCAL="$TARGET/.claude/rufix"
 
-profiles() {
-  echo "$HOME/.profile"
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do [ -f "$rc" ] && echo "$rc"; done
-}
-
-if [ "$REVERT" = "1" ]; then
-  if [ -x "$TARGET" ]; then
-    "$TARGET" uninstall $PROJECT
+if [ "$MODE" = "revert" ]; then
+  if [ -x "$LOCAL/rufix$EXE" ]; then
+    "$LOCAL/rufix$EXE" uninstall
   else
-    echo "rufix binary not found at $TARGET; skipping hook uninstall"
+    echo "rufix is not installed in $TARGET"
   fi
-  rm -f "$TARGET" "$BIN/rufix-shell$EXE"
-  for rc in $(profiles); do
+  # A binary that was running could not delete itself (Windows): it is gone now.
+  rm -f "$LOCAL/rufix$EXE" "$LOCAL/rufix-shell$EXE" "$LOCAL/.gitignore"
+  rmdir "$LOCAL" 2>/dev/null || true
+  echo "rufix removed from $TARGET."
+  exit 0
+fi
+
+(cd "$SRC" && zig build -Doptimize=ReleaseSmall)
+BUILT="$SRC/zig-out/bin/rufix$EXE"
+
+if [ "$MODE" = "clean-global" ]; then
+  # What older versions installed: hooks in ~/.claude/settings.json, the
+  # binaries in $RUFIX_BIN_DIR (default ~/.local/bin) and a PATH line.
+  BIN="${RUFIX_BIN_DIR:-$HOME/.local/bin}"
+  MARK="# rufix: binary on the PATH"
+  "$BUILT" uninstall --global
+  rm -f "$BIN/rufix$EXE" "$BIN/rufix-shell$EXE" "$BIN/rufix$EXE.new"
+  for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
     if [ -f "$rc" ] && grep -qF "$MARK" "$rc"; then
       # grep exits 1 when our line was the only one: the empty file is right.
       { grep -vF "$MARK" "$rc" || true; } > "$rc.rufix-tmp"
       mv "$rc.rufix-tmp" "$rc"
+      echo "rufix setup: removed the PATH line from $rc"
     fi
   done
-  echo "rufix removed."
+  echo "rufix setup: repositories set up by an older version still call $BIN/rufix:"
+  echo "rufix setup: run the installer again in each of them."
   exit 0
 fi
 
-zig build -Doptimize=ReleaseSmall
-mkdir -p "$BIN"
-# Replace atomically: a hook may be running the old binary right now.
-cp "zig-out/bin/rufix$EXE" "$TARGET.new"
-mv -f "$TARGET.new" "$TARGET"
-
-# Make `rufix` available in new shells: one marked line per profile, once.
-# Git Bash needs the POSIX form: the colon of C:\ would split the PATH.
-PATH_BIN="$BIN"
-if command -v cygpath >/dev/null 2>&1; then PATH_BIN="$(cygpath -u "$BIN")"; fi
-for rc in $(profiles); do
-  if ! { [ -f "$rc" ] && grep -qF "$MARK" "$rc"; }; then
-    printf 'export PATH="%s:$PATH" %s\n' "$PATH_BIN" "$MARK" >> "$rc"
-    echo "rufix setup: added $PATH_BIN to the PATH in $rc"
-  fi
-done
-
-"$TARGET" install $PROJECT $ENVFILES $SHELLWRAP $MOD
-"$TARGET" check $PROJECT $ENVFILES
-case ":$PATH:" in
-  *":$PATH_BIN:"*) ;;
-  *) echo "rufix setup: open a new shell (or run: export PATH=\"$PATH_BIN:\$PATH\") to use rufix here" ;;
-esac
-# Another copy earlier on the PATH would answer to `rufix` instead.
-for other in $(PATH="$PATH_BIN:$PATH" which -a "rufix$EXE" rufix 2>/dev/null | sort -u); do
-  [ "$other" = "$PATH_BIN/rufix$EXE" ] || [ "$other" = "$PATH_BIN/rufix" ] || \
-    echo "rufix setup: warning: another rufix is on the PATH: $other - remove it, or it may answer to rufix" >&2
-done
+cd "$TARGET"
+"$BUILT" install $ENVFILES
+"$LOCAL/rufix$EXE" check $ENVFILES

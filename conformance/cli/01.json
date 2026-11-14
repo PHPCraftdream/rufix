@@ -134,40 +134,113 @@
       "stderr_nonempty": true
     },
     {
-      "name": "install default",
+      "name": "install sets up the current folder only",
       "args": ["install"],
       "exit": 0,
-      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}\\home\\.claude\\settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stdout": "rufix local: binary installed in {tmp}/work/.claude/rufix\nrufix install: installed 2 hook entr(y/ies) in {tmp}/work/.claude/settings.local.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\nrufix shell: shell prefix set in {tmp}/work/.claude/settings.local.json\nrufix mod: mod written to {tmp}/work/.claude/skills/rufix\n",
       "stderr": "",
       "stderr_nonempty": false,
-      "settings": {"home/.claude/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+      "settings": {"work/.claude/settings.local.json": "{\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":30,\"type\":\"command\"}],\"matcher\":\"\"}],\"PreToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":10,\"type\":\"command\"}],\"matcher\":\"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"}]},\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"{tmp}/work/.claude/rufix/rufix-shell\"}}"}
     },
     {
-      "name": "install project env files",
-      "args": ["install", "--project", "--env-files"],
+      "name": "install with env files",
+      "args": ["install", "--env-files"],
       "exit": 0,
-      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}\\work\\.claude\\settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stdout": "rufix local: binary installed in {tmp}/work/.claude/rufix\nrufix install: installed 2 hook entr(y/ies) in {tmp}/work/.claude/settings.local.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\nrufix shell: shell prefix set in {tmp}/work/.claude/settings.local.json\nrufix mod: mod written to {tmp}/work/.claude/skills/rufix\n",
       "stderr": "",
       "stderr_nonempty": false,
-      "settings": {"work/.claude/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook --env-files\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook --env-files\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+      "settings": {"work/.claude/settings.local.json": "{\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook --env-files\",\"onFailure\":\"block\",\"timeout\":30,\"type\":\"command\"}],\"matcher\":\"\"}],\"PreToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook --env-files\",\"onFailure\":\"block\",\"timeout\":10,\"type\":\"command\"}],\"matcher\":\"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"}]},\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"{tmp}/work/.claude/rufix/rufix-shell\",\"RUFIX_ENV_FILES\":\"1\"}}"}
     },
     {
-      "name": "install explicit path",
-      "args": ["install", "--path", "{tmp}/deep/dir/settings.json"],
+      "name": "install moves hooks out of the shared settings.json",
+      "args": ["install"],
+      "files": {"work/.claude/settings.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"\\\"C:/old/rufix\\\" hook\"}]}]}}"},
       "exit": 0,
-      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}/deep/dir/settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stdout": "rufix local: binary installed in {tmp}/work/.claude/rufix\nrufix install: installed 2 hook entr(y/ies) in {tmp}/work/.claude/settings.local.json\nrufix legacy: removed 1 hook entr(y/ies) from {tmp}/work/.claude/settings.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\nrufix shell: shell prefix set in {tmp}/work/.claude/settings.local.json\nrufix mod: mod written to {tmp}/work/.claude/skills/rufix\n",
       "stderr": "",
       "stderr_nonempty": false,
-      "settings": {"deep/dir/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+      "settings": {"work/.claude/settings.json": "{\"model\":\"opus\"}", "work/.claude/settings.local.json": "{\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":30,\"type\":\"command\"}],\"matcher\":\"\"}],\"PreToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":10,\"type\":\"command\"}],\"matcher\":\"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"}]},\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"{tmp}/work/.claude/rufix/rufix-shell\"}}"}
     },
     {
-      "name": "install path equals",
-      "args": ["install", "--path={tmp}/s.json"],
+      "name": "install in a subfolder of a repository is refused",
+      "note": "work holds .git. Claude Code reads .claude/ from the folder it starts in, so a subfolder would be set up for nothing; nothing is written.",
+      "cwd": "work/pkg",
+      "args": ["install"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "install --here sets up the subfolder anyway",
+      "cwd": "work/pkg",
+      "args": ["install", "--here"],
       "exit": 0,
-      "stdout": "rufix install: installed 2 hook entr(y/ies) in {tmp}/s.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n",
+      "stdout": "rufix local: binary installed in {tmp}/work/pkg/.claude/rufix\nrufix install: installed 2 hook entr(y/ies) in {tmp}/work/pkg/.claude/settings.local.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\nrufix shell: shell prefix set in {tmp}/work/pkg/.claude/settings.local.json\nrufix mod: mod written to {tmp}/work/pkg/.claude/skills/rufix\n",
       "stderr": "",
       "stderr_nonempty": false,
-      "settings": {"s.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 30,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"\"\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"\\\"{tmp}/bin/rufix\\\" hook\",\n            \"onFailure\": \"block\",\n            \"timeout\": 10,\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"\n      }\n    ]\n  }\n}\n"}
+      "settings": {"work/pkg/.claude/settings.local.json": "{\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/pkg/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":30,\"type\":\"command\"}],\"matcher\":\"\"}],\"PreToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/pkg/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":10,\"type\":\"command\"}],\"matcher\":\"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"}]},\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"{tmp}/work/pkg/.claude/rufix/rufix-shell\"}}"}
+    },
+    {
+      "name": "status in a subfolder is refused too",
+      "note": "check and uninstall share the same flag parsing, so they refuse alike.",
+      "cwd": "work/pkg",
+      "args": ["status"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "uninstall --global does not depend on the folder",
+      "cwd": "work/pkg",
+      "args": ["uninstall", "--global"],
+      "files": {"home/.claude/settings.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix uninstall: removed 1 hook entr(y/ies) from {tmp}/home/.claude/settings.json\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"home/.claude/settings.json": "{\"model\":\"opus\"}"}
+    },
+    {
+      "name": "status notes the hooks of an older global install",
+      "args": ["status"],
+      "files": {"home/.claude/settings.json": "{\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix status: not installed (no hooks section)\nrufix global: older hooks are still in {tmp}/home/.claude/settings.json; remove them: install.sh --clean-global (or rufix uninstall --global)\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "check notes the hooks of an older global install",
+      "args": ["check"],
+      "files": {"home/.claude/settings.json": "{\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "settings: {tmp}/work/.claude/settings.local.json (not installed (no hooks section))\nrufix global: older hooks are still in {tmp}/home/.claude/settings.json; remove them: install.sh --clean-global (or rufix uninstall --global)\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stderr": "",
+      "stderr_nonempty": false
+    },
+    {
+      "name": "install notes the hooks of an older global install",
+      "args": ["install"],
+      "files": {"home/.claude/settings.json": "{\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix local: binary installed in {tmp}/work/.claude/rufix\nrufix install: installed 2 hook entr(y/ies) in {tmp}/work/.claude/settings.local.json\nrufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\nrufix shell: shell prefix set in {tmp}/work/.claude/settings.local.json\nrufix mod: mod written to {tmp}/work/.claude/skills/rufix\nrufix global: older hooks are still in {tmp}/home/.claude/settings.json; remove them: install.sh --clean-global (or rufix uninstall --global)\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"work/.claude/settings.local.json": "{\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":30,\"type\":\"command\"}],\"matcher\":\"\"}],\"PreToolUse\":[{\"hooks\":[{\"command\":\"\\\"{tmp}/work/.claude/rufix/rufix\\\" hook\",\"onFailure\":\"block\",\"timeout\":10,\"type\":\"command\"}],\"matcher\":\"^(Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob)$|^mcp__\"}]},\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"{tmp}/work/.claude/rufix/rufix-shell\"}}"}
+    },
+    {
+      "name": "install refuses the user's global settings",
+      "args": ["install", "--global"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
+    },
+    {
+      "name": "install refuses the retired project flag",
+      "args": ["install", "--project"],
+      "exit": 1,
+      "stdout": "",
+      "stderr_nonempty": true
     },
     {
       "name": "install bad flag",
@@ -185,8 +258,8 @@
     },
     {
       "name": "install invalid settings",
-      "args": ["install", "--path", "{tmp}/bad.json"],
-      "files": {"bad.json": "{"},
+      "args": ["install"],
+      "files": {"work/.claude/settings.local.json": "{"},
       "exit": 1,
       "stdout": "",
       "stderr_nonempty": true
@@ -201,37 +274,58 @@
     },
     {
       "name": "status after manual",
-      "args": ["status", "--path", "{tmp}/s.json"],
-      "files": {"s.json": "{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\",\"timeout\":10}]}]}}"},
+      "args": ["status"],
+      "files": {"work/.claude/settings.local.json": "{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\",\"timeout\":10}]}]}}"},
       "exit": 0,
       "stdout": "rufix status: stale: PostToolUse missing, PreToolUse matcher outdated, PreToolUse not fail-closed, PreToolUse runs another binary; re-run rufix install\n",
       "stderr": "",
       "stderr_nonempty": false
     },
     {
-      "name": "uninstall",
-      "args": ["uninstall", "--path", "{tmp}/s.json"],
-      "files": {"s.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "name": "uninstall the current folder",
+      "args": ["uninstall"],
+      "files": {"work/.claude/settings.local.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
       "exit": 0,
-      "stdout": "rufix uninstall: removed 1 hook entr(y/ies) from {tmp}/s.json\n",
+      "stdout": "rufix uninstall: removed 1 hook entr(y/ies) from {tmp}/work/.claude/settings.local.json\n",
       "stderr": "",
-      "stderr_nonempty": false
+      "stderr_nonempty": false,
+      "settings": {"work/.claude/settings.local.json": "{\"model\":\"opus\"}"}
+    },
+    {
+      "name": "uninstall clears hooks from the shared settings.json too",
+      "args": ["uninstall"],
+      "files": {"work/.claude/settings.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix uninstall: no hooks section\nrufix legacy: removed 1 hook entr(y/ies) from {tmp}/work/.claude/settings.json\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"work/.claude/settings.json": "{\"model\":\"opus\"}"}
+    },
+    {
+      "name": "uninstall global removes only the old user hooks",
+      "args": ["uninstall", "--global"],
+      "files": {"home/.claude/settings.json": "{\"model\":\"opus\",\"hooks\":{\"PostToolUse\":[{\"matcher\":\"\",\"hooks\":[{\"type\":\"command\",\"command\":\"rufix hook\"}]}]}}"},
+      "exit": 0,
+      "stdout": "rufix uninstall: removed 1 hook entr(y/ies) from {tmp}/home/.claude/settings.json\n",
+      "stderr": "",
+      "stderr_nonempty": false,
+      "settings": {"home/.claude/settings.json": "{\"model\":\"opus\"}"}
     },
     {
       "name": "check",
       "args": ["check"],
       "exit": 0,
-      "stdout": "settings: {tmp}\\home\\.claude\\settings.json (not installed (no hooks section))\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stdout": "settings: {tmp}/work/.claude/settings.local.json (not installed (no hooks section))\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
       "stderr": "",
       "stderr_nonempty": false
     },
     {
       "name": "check env files",
-      "args": ["check", "--env-files", "--project"],
+      "args": ["check", "--env-files"],
       "env": {"RUFIX_ENV_FILE": "{tmp}/secrets.env"},
       "files": {"secrets.env": "JIRA_TOKEN=rufix_test_code_secret_number_001\nJIRA_URL=https://jira.internal.example:8443\n# comment\nexport EXTRA_KEY='rufix_test_quoted_value_09'\n"},
       "exit": 0,
-      "stdout": "settings: {tmp}\\work\\.claude\\settings.json (not installed (no hooks section))\nsecrets: compiled + env files (variables: 3, protected values: 5, protected hosts: 3, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stdout": "settings: {tmp}/work/.claude/settings.local.json (not installed (no hooks section))\nsecrets: compiled + env files (variables: 3, protected values: 5, protected hosts: 3, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
       "stderr": "",
       "stderr_nonempty": false
     },
@@ -239,7 +333,7 @@
       "name": "check env files missing",
       "args": ["check", "--env-files"],
       "exit": 0,
-      "stdout": "settings: {tmp}\\home\\.claude\\settings.json (not installed (no hooks section))\nenv files: not found; using compiled values with format rules\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
+      "stdout": "settings: {tmp}/work/.claude/settings.local.json (not installed (no hooks section))\nenv files: not found; using compiled values with format rules\nsecrets: compiled (variables: 0, protected values: 0, protected hosts: 0, format rules: 0, compiled values: 0)\ndemo: 0 replacements on fake patterns:\n  in:  Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n  out: Bearer DEMOdemoDEMOdemo12 ATATT3DEMOtokenDEMOtoken12345 query ?token=DEMOdemoDEMOdemo1234\n",
       "stderr": "",
       "stderr_nonempty": false
     }
