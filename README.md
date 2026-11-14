@@ -125,9 +125,10 @@ binary installs. Flag: `--env-files` (hooks also load env files).
 
 Run it in the repository's root, the folder that holds `.git`: Claude Code
 reads `.claude/` from the folder it starts in. In a subfolder of a repository
-rufix refuses (`rufix install --here` sets up that folder anyway, for a
-package with its own `.claude/`); `status`, `check` and `uninstall` refuse
-alike.
+(a folder without its own `.git` below one that has it) rufix refuses
+(`rufix install --here` sets up that folder anyway, for a package with its own
+`.claude/`); `status`, `check` and `uninstall` refuse alike. A submodule or a
+nested checkout, which has its own `.git`, is a root.
 
 ### Coming from a global install
 

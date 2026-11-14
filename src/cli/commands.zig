@@ -215,7 +215,7 @@ fn parseSettings(a: std.mem.Allocator, args: []const []const u8) !Settings {
     // Claude Code reads .claude/ from the folder it starts in, normally the
     // repository root: a subfolder would be set up for nothing.
     const here = f.bools.get("here") orelse false;
-    if (!global and !here and local.repositoryAbove(a, repo, "") != null) return error.InsideRepository;
+    if (!global and !here and local.isSubfolder(a, repo, "")) return error.InsideRepository;
     // A repository's hooks run its own copy of the binary; an old global
     // entry points wherever it was installed.
     return .{
