@@ -48,11 +48,10 @@ const usage =
     \\  rufix hook [--env-files]   run as a Claude Code hook (dispatches on stdin JSON)
     \\  rufix install [--env-files] [--here]
     \\                            set up the current folder (a repository root; --here
-    \\                            allows a subfolder of one), nothing else:
-    \\                            copies this binary to .claude/rufix/, adds the hooks and
-    \\                            the shell wrapper to .claude/settings.local.json and a mod
-    \\                            (masks your prompts and failed tool output) to
-    \\                            .claude/skills/rufix
+    \\                            allows a subfolder of one), nothing else: the hooks and
+    \\                            the shell wrapper go to .claude/settings.local.json and a
+    \\                            mod (masks your prompts and failed tool output) to
+    \\                            .claude/skills/rufix; they name this binary
     \\  rufix redact [--env-files]  mask stdin to stdout (what the mod calls)
     \\  rufix uninstall           take all of that out of the current folder
     \\  rufix status
@@ -61,8 +60,9 @@ const usage =
     \\  rufix uninstall --global  one-off: remove hooks older versions put into ~/.claude
     \\  rufix version
     \\
-    \\Install: run ./install.sh (or install.cmd) from the repository to protect: it builds
-    \\with `zig build` and runs `rufix install` there. Remove: ./install.sh --revert.
+    \\Install: ./install.sh (or install.cmd) builds with `zig build` and puts rufix on the
+    \\PATH, once per machine; then run `rufix install` in each repository to protect.
+    \\Remove: `rufix uninstall` in a repository, ./install.sh --uninstall for the machine.
     \\
     \\Replacements use compiled values.zig only by default. --env-files enables
     \\$RUFIX_ENV_FILE, $RUFIX_SECRETS_DIR, .atlassian.env walking up from the hook
@@ -216,12 +216,11 @@ fn parseSettings(a: std.mem.Allocator, args: []const []const u8) !Settings {
     // repository root: a subfolder would be set up for nothing.
     const here = f.bools.get("here") orelse false;
     if (!global and !here and local.isSubfolder(a, repo, "")) return error.InsideRepository;
-    // A repository's hooks run its own copy of the binary; an old global
-    // entry points wherever it was installed.
+    // The hooks name the binary that is running: the installed one.
     return .{
         .o = .{
             .path = if (global) try local.sharedSettings(a, try os.home(a)) else try local.settingsPath(a, repo),
-            .exe_dir = if (global) try os.exeDir(a) else try local.dir(a, repo),
+            .exe_dir = try os.exeDir(a),
             .env_files = f.bools.get("env-files") orelse false,
         },
         .repo = repo,
@@ -245,29 +244,27 @@ fn legacyHooks(a: std.mem.Allocator, out: *std.ArrayList(u8), repo: []const u8) 
 }
 
 /// A line when the user's own settings still hold the hooks of an older,
-/// global install: they run beside the repository's and may name a binary
-/// that is gone.
+/// global install: they apply to every repository, run beside the
+/// repository's own and may name a binary that is gone.
 fn globalNote(a: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
     const path = local.sharedSettings(a, os.home(a) catch return) catch return;
     if (!os.exists(a, path)) return;
     const state = install.status(a, .{ .path = path, .exe_dir = "" }) catch return;
     if (std.mem.startsWith(u8, state, "not installed")) return;
-    try say(a, out, "global", try std.fmt.allocPrint(a, "older hooks are still in {s}; remove them: install.sh --clean-global (or rufix uninstall --global)", .{path}));
+    try say(a, out, "global", try std.fmt.allocPrint(a, "older hooks are still in {s}; remove them: rufix uninstall --global", .{path}));
 }
 
 fn runSettings(a: std.mem.Allocator, action: []const u8, args: []const []const u8) !void {
     const s = try parseSettings(a, args);
     const o = s.o;
     const installing = std.mem.eql(u8, action, "install");
-    // rufix lives in one repository only; --global is for clearing out what
-    // older versions put into the user's settings.
+    // rufix is set up in one repository only; --global is for clearing out
+    // what older versions put into the user's settings.
     if (s.global and installing) return error.GlobalIsCleanupOnly;
     var out: std.ArrayList(u8) = .empty;
     if (installing) {
-        const copy = try local.install(a, s.repo, try os.exePath(a));
-        try say(a, &out, "local", copy);
-        // Everything below names the copy in the repository, not this binary.
-        const exe = try local.exePath(a, s.repo);
+        // The hooks, the shell prefix and the mod name the installed binary.
+        const exe = try os.exePath(a);
         try say(a, &out, action, try install.install(a, o));
         try legacyHooks(a, &out, s.repo);
         try out.appendSlice(a, "rufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n");
@@ -282,15 +279,12 @@ fn runSettings(a: std.mem.Allocator, action: []const u8, args: []const []const u
             if (!std.mem.eql(u8, shell_line, "no shell prefix")) try say(a, &out, "shell", shell_line);
             const mod_line = try modinstall.uninstall(a, o.path);
             if (!std.mem.eql(u8, mod_line, "no mod")) try say(a, &out, "mod", mod_line);
-            const local_line = try local.uninstall(a, s.repo);
-            if (!std.mem.eql(u8, local_line, "no local binaries")) try say(a, &out, "local", local_line);
         }
     } else {
         try say(a, &out, action, try install.status(a, o));
         if (!s.global) {
             if (try shellinstall.status(a, o.path)) try out.appendSlice(a, "rufix shell: on\n");
             if (try modinstall.status(a, o.path)) try out.appendSlice(a, "rufix mod: on\n");
-            if (local.status(a, s.repo)) try out.appendSlice(a, "rufix local: binary present\n");
             try globalNote(a, &out);
         }
     }
@@ -325,16 +319,16 @@ fn runFilter(a: std.mem.Allocator, args: []const []const u8) !void {
     try shell.filter(a, &st);
 }
 
+/// What this binary protects: counts and a demo on fake patterns. It looks at
+/// the binary only, not at any repository, so the installer can run it
+/// anywhere; `status` reports a repository.
 fn runCheck(a: std.mem.Allocator, args: []const []const u8) !void {
-    const s = try parseSettings(a, args);
-    const o = s.o;
-    const status = try install.status(a, o);
+    const f = try parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }});
+    if (f.rest.len != 0) return error.UnexpectedSettingsArguments;
     var out: std.ArrayList(u8) = .empty;
-    try out.appendSlice(a, try std.fmt.allocPrint(a, "settings: {s} ({s})\n", .{ o.path, status }));
-    if (!s.global) try globalNote(a, &out);
     var base: []const engine.Var = &.{};
     var source: []const u8 = "compiled";
-    if (o.env_files) {
+    if (f.bools.get("env-files") orelse false) {
         const path = try envfile.resolve(a, try os.cwd(a), try os.exeDir(a), try os.home(a));
         if (path.len == 0) {
             try out.appendSlice(a, "env files: not found; using compiled values with format rules\n");
@@ -363,7 +357,7 @@ fn runCheck(a: std.mem.Allocator, args: []const []const u8) !void {
 fn message(err: anyerror) []const u8 {
     return switch (err) {
         error.InsideRepository => "this folder is inside a repository: run rufix in the folder that holds .git (--here sets up this folder anyway)",
-        error.GlobalIsCleanupOnly => "rufix installs into the current repository only; --global just removes what older versions left in ~/.claude (uninstall, status)",
+        error.GlobalIsCleanupOnly => "rufix is set up per repository, never in ~/.claude; --global only removes what older versions left there (uninstall, status)",
         error.ForeignShellPrefix => "CLAUDE_CODE_SHELL_PREFIX already points at another program; remove it first",
         error.EnvNotAnObject => "settings \"env\" is not an object; fix it by hand",
         error.HooksNotAnObject => "settings \"hooks\" is not an object; fix it by hand",

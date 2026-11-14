@@ -88,35 +88,45 @@ test "mod install writes, reports and removes only its own files" {
     try std.testing.expect(os.exists(a, foreign));
 }
 
-test "local install copies the binary, ignores itself and removes only its own files" {
+test "the shell twin is made next to the binary once and never replaced" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const shellinstall = rufix.shellinstall;
+    const root = try t.tempDir(a);
+    const bin = try os.join(a, root, "bin");
+    const exe = try os.join(a, bin, try os.exeName(a, "rufix"));
+    const twin = try shellinstall.shellExe(a, bin);
+    const settings = try os.join(a, try os.join(a, try os.join(a, root, "work"), ".claude"), "settings.json");
+    try os.mkdirAll(a, bin);
+    try io.writeFileAtomic(a, exe, "binary-v1", .executable);
+    try std.testing.expect(!os.exists(a, twin));
+    _ = try shellinstall.install(a, settings, exe, false);
+    try std.testing.expectEqualStrings("binary-v1", (try io.readFile(a, twin)).?);
+    // The installer owns the twin: a repository's install leaves it alone.
+    try io.writeFileAtomic(a, exe, "binary-v2", .executable);
+    _ = try shellinstall.install(a, settings, exe, false);
+    try std.testing.expectEqualStrings("binary-v1", (try io.readFile(a, twin)).?);
+    // Only the repository's settings are written; no file appears beside them.
+    try std.testing.expect(try shellinstall.status(a, settings));
+    try std.testing.expect(!os.exists(a, try os.join(a, os.dir(settings), "rufix")));
+}
+
+test "the self-ignoring .gitignore is removed only when it is ours" {
     var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const local = rufix.local;
-    const repo = try t.tempDir(a);
-    const running = try os.join(a, repo, "built");
-    try io.writeFileAtomic(a, running, "binary-v1", .executable);
-    try std.testing.expect(!local.status(a, repo));
-    _ = try local.install(a, repo, running);
-    try std.testing.expect(local.status(a, repo));
-    const copy = (try io.readFile(a, try local.exePath(a, repo))).?;
-    try std.testing.expectEqualStrings("binary-v1", copy);
-    // The folder ignores itself, so the binary with private values is never committed.
-    const ignore = (try io.readFile(a, try os.join(a, try local.dir(a, repo), ".gitignore"))).?;
+    const folder = try t.tempDir(a);
+    try local.writeIgnore(a, folder);
+    const ignore = (try io.readFile(a, try os.join(a, folder, ".gitignore"))).?;
     try std.testing.expect(std.mem.startsWith(u8, ignore, local.ignore_marker));
     try std.testing.expect(std.mem.endsWith(u8, ignore, "\n*\n"));
-    // A newer build replaces the copy.
-    try io.writeFileAtomic(a, running, "binary-v2", .executable);
-    _ = try local.install(a, repo, running);
-    try std.testing.expectEqualStrings("binary-v2", (try io.readFile(a, try local.exePath(a, repo))).?);
-    _ = try local.uninstall(a, repo);
-    try std.testing.expect(!os.exists(a, try local.dir(a, repo)));
-    try std.testing.expectEqualStrings("no local binaries", try local.uninstall(a, repo));
+    local.removeIgnore(a, folder);
+    try std.testing.expect(!os.exists(a, try os.join(a, folder, ".gitignore")));
     // A .gitignore that is not ours survives.
-    const folder = try local.dir(a, repo);
-    try os.mkdirAll(a, folder);
     try io.writeFileAtomic(a, try os.join(a, folder, ".gitignore"), "mine\n", .data);
-    _ = try local.uninstall(a, repo);
+    local.removeIgnore(a, folder);
     try std.testing.expect(os.exists(a, try os.join(a, folder, ".gitignore")));
 }
 
