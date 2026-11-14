@@ -24,12 +24,13 @@ src/cli/                  commands, flags, usage (main logic of the CLI)
 src/core/                 engine, URL parser, Pike VM, JSON, regex/, rules.zig
                           (the rule type and the domain/import/path/word helpers;
                           a module of its own, "rules", imported by values.zig)
-src/hooks/                hook contract, shell prefix, mod, local binary copy,
-                          settings.json installers (settingsfile.zig: read/write)
+src/hooks/                hook contract, shell prefix, mod, repository paths and
+                          the self-ignoring .gitignore (local.zig), settings
+                          installers (settingsfile.zig: read/write)
 src/platform/             C-runtime I/O, OS access (paths, env, spawn), env files
 tests/                    zig build test: fixtures, CLI scenarios, linter
 conformance/              behaviour contract as JSON fixtures (see its README)
-install.sh / install.ps1 / install.cmd   thin setup scripts over the CLI
+install.sh / install.ps1 / install.cmd   build the binary and put it on the PATH
 secrets/                  ignored by git: secrets/values.zig, local builds
 ```
 
@@ -75,16 +76,20 @@ Run `zig build test` after every change.
 9. **Regex dialect = Go's RE2.** `conformance/regex` pins it. Unsupported
    syntax (Unicode classes, folding outside the tables) is a compile error,
    never a partial match.
-10. **Everything is per repository.** `rufix install` works on the current
-    folder only: binary copy in `.claude/rufix/`, hooks and shell prefix in
-    `.claude/settings.local.json`, mod in `.claude/skills/rufix/`. It never
-    touches the user's PATH or `~/.claude` (`uninstall --global` only removes
-    what older versions left there). Folders holding the binary or machine
-    paths carry a self-ignoring `.gitignore`. In a subfolder of a repository
-    the commands refuse unless `--here` is given. The prefix never overwrites a
-    foreign `CLAUDE_CODE_SHELL_PREFIX`, anything that is not a Bash tool call
-    passes through it untouched, and uninstall removes only files carrying
-    our marker.
+10. **The binary is global, the setup is per repository.** The installer
+    scripts (`install.sh`/`.ps1`/`.cmd`) build the binary and put it, with
+    its `rufix-shell` twin, in the bin dir (`$RUFIX_BIN_DIR`) and on the
+    PATH; they touch no repository. `rufix install` works on the current
+    folder only: hooks and shell prefix in `.claude/settings.local.json`,
+    mod in `.claude/skills/rufix/`, all naming the installed binary by its
+    absolute path. It never writes `~/.claude` (`uninstall --global` only
+    removes what older versions left there) and never copies the binary into
+    a repository: the binary holds private values, so it stays outside every
+    repository. The mod's folder carries a self-ignoring `.gitignore`. In a
+    subfolder of a repository the commands refuse unless `--here` is given.
+    The prefix never overwrites a foreign `CLAUDE_CODE_SHELL_PREFIX`,
+    anything that is not a Bash tool call passes through it untouched, and
+    uninstall removes only files carrying our marker.
 11. **Replacements go through the binary.** The mod never masks by itself:
     it calls `rufix redact`. User input takes the read direction (masking),
     never restore. The mod fails closed (`{ drop }`, `{ deny }`).
@@ -121,6 +126,7 @@ Run `zig build test` after every change.
 ## CI
 
 `.github/workflows/ci.yml` runs `zig build test`, a release build with a
-size budget and the installer smoke test (`.github/smoke.sh`, plus
-`install.ps1` on Windows) on Ubuntu and Windows. A change to the installers
-or to what `rufix install` writes needs `bash .github/smoke.sh` to stay green.
+size budget and the installer smoke tests (`.github/smoke.sh`, plus
+`.github/smoke.ps1` for `install.ps1` and `install.cmd` on Windows) on Ubuntu
+and Windows. A change to the installers or to what `rufix install` writes
+needs `bash .github/smoke.sh` (and `smoke.ps1`) to stay green.

@@ -1,23 +1,17 @@
 @echo off
-rem rufix setup wrapper: runs install.ps1 (PowerShell) from cmd.exe, in the
-rem current folder (the repository to protect). Flags become PowerShell switches:
-rem   install.cmd                  set up this folder
-rem   install.cmd --env-files      hooks also load external env files
-rem   install.cmd --revert         take everything out of this folder
-rem   install.cmd --clean-global   one-off: remove what older versions put outside repositories
+rem rufix setup wrapper: runs install.ps1 (PowerShell) from cmd.exe. Once per
+rem machine, from any folder; a repository is set up by `rufix install` in it.
+rem   install.cmd              build, install, add to the PATH
+rem   install.cmd --uninstall  remove the binaries and the PATH entry
 setlocal EnableDelayedExpansion
 set "PSARGS="
 :next
 if "%~1"=="" goto run
 set "A=%~1"
-if /i "%A%"=="--revert" (
-  set "PSARGS=!PSARGS! -Revert"
-) else if /i "%A%"=="--env-files" (
-  set "PSARGS=!PSARGS! -EnvFiles"
-) else if /i "%A%"=="--clean-global" (
-  set "PSARGS=!PSARGS! -CleanGlobal"
+if /i "%A%"=="--uninstall" (
+  set "PSARGS=!PSARGS! -Uninstall"
 ) else (
-  echo rufix setup: unknown flag %A% ^(supported: --env-files, --revert, --clean-global^) 1>&2
+  echo rufix setup: unknown flag %A% ^(supported: --uninstall^) 1>&2
   exit /b 1
 )
 shift

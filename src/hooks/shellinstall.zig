@@ -1,7 +1,8 @@
-//! Per-repository shell prefix: `rufix install` copies the repository's
-//! binary to rufix-shell next to it and points Claude Code's
-//! CLAUDE_CODE_SHELL_PREFIX at it in the repository's
-//! .claude/settings.local.json — a personal file, since it holds a local path.
+//! Per-repository shell prefix: `rufix install` points Claude Code's
+//! CLAUDE_CODE_SHELL_PREFIX in the repository's .claude/settings.local.json at
+//! the rufix-shell twin that sits next to the installed binary — a personal
+//! file, since it holds a local path. The installer makes the twin; it is
+//! created here only when it is missing (running a freshly built binary).
 const std = @import("std");
 const json = @import("../core/json.zig");
 const io = @import("../platform/io.zig");
@@ -24,7 +25,9 @@ const save = settingsfile.save;
 
 pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []const u8, env_files: bool) ![]const u8 {
     const target = try shellExe(a, os.dir(exe_path));
-    try io.copyExecutable(a, exe_path, target);
+    // Never overwritten: another repository's session may be running it, and
+    // Windows cannot replace a running executable.
+    if (!os.exists(a, target)) try io.copyExecutable(a, exe_path, target);
     const path = try localPath(a, settings_path);
     const settings = try load(a, path);
     var env: *json.Object = undefined;

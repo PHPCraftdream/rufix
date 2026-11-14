@@ -12,9 +12,10 @@ dependencies) that acts as a pair of
 output before it reaches the model, and restores placeholders in commands and
 local file edits that legitimately target your internal hosts. It also wraps
 the repository's shell, so even the output of a failing command is redacted,
-and masks your prompts through a mod. It installs into one repository at a
-time — the folder you run the installer in — and nowhere else: no PATH entry,
-nothing in `~/.claude`. The installer is built into the binary.
+and masks your prompts through a mod. The binary is installed once per
+machine (on the PATH); the protection is switched on per repository — `rufix
+install` in a repository writes only that repository's `.claude/`, never
+`~/.claude`. The setup is built into the binary.
 
 ## Why
 
@@ -61,13 +62,15 @@ Run in a repository, `rufix install` writes only inside its `.claude/`:
 
 | Path | Content |
 |---|---|
-| `.claude/rufix/` | a copy of the binary, its `rufix-shell` twin and a `.gitignore` that ignores the folder (the binary holds your private values: it must never be committed) |
 | `.claude/settings.local.json` | the two hooks and `CLAUDE_CODE_SHELL_PREFIX` — the personal settings file, since they name this machine's binary |
 | `.claude/skills/rufix/` | the mod, with its own `.gitignore` |
 
-Hooks left in the shared `.claude/settings.json` by older versions are moved
-out. `rufix uninstall` takes it all out again and leaves foreign entries,
-settings and folders alone.
+Both name the installed binary (and its `rufix-shell` twin beside it) by its
+absolute path; the binary itself stays outside the repository, because it
+holds your private values and must never be committed. Hooks left in the
+shared `.claude/settings.json` by older versions are moved out. `rufix
+uninstall` takes it all out again and leaves foreign entries, settings and
+folders alone.
 
 ### Shell wrapper
 
@@ -101,47 +104,69 @@ shell output — masking.
 - **Fail-closed**: when masking fails, the prompt is not sent and the error
   is withheld.
 
-The mod, the hooks and the shell prefix name the repository's copy of the
-binary by its absolute path: re-run the installer after moving the repository.
+The mod, the hooks and the shell prefix name the installed binary by its
+absolute path: set a repository up again (`rufix install`) if the binary moves,
+for instance after changing `RUFIX_BIN_DIR`.
 
 ## Install
 
-Requires [Zig 0.16](https://ziglang.org/download/). Run the installer **from
-the repository you want protected**:
+Requires [Zig 0.16](https://ziglang.org/download/). Two steps: the binary goes
+into the system once, then each repository you want protected is set up.
+
+**1. The binary, once per machine** (from any folder):
+
+```bash
+/path/to/rufix/install.sh                  # sh: Linux, macOS, Git Bash
+C:\path\to\rufix\install.cmd               # Windows cmd.exe (runs install.ps1)
+```
+
+The installer builds with `zig build` (ReleaseSmall) in the rufix folder and
+puts `rufix` and its `rufix-shell` twin into `$RUFIX_BIN_DIR` (default
+`~/.local/bin`, on Windows `%LOCALAPPDATA%\rufix\bin`), which it adds to the
+PATH (profile lines in `~/.profile`, `~/.bashrc`, `~/.zshrc`; the user's PATH
+in the registry on Windows). Open a new terminal afterwards. Run it again
+after editing `secrets/values.zig`: every repository then uses the new
+binary at once. It touches no repository and nothing in `~/.claude`.
+
+**2. Each repository** (in its root, the folder that holds `.git`):
 
 ```bash
 cd /path/to/your/repo
-/path/to/rufix/install.sh                  # sh: Linux, macOS, Git Bash
-C:\path\to\rufix\install.cmd               # Windows cmd.exe (runs install.ps1)
-/path/to/rufix/install.sh --revert         # take everything out of this repository
-/path/to/rufix/install.sh --clean-global   # one-off, see below
+rufix install                              # hooks, shell wrapper and mod for this repository
+rufix install --env-files                  # the hooks also load env files
+rufix status                               # installed / stale / not installed
 ```
 
-The installer builds with `zig build` (ReleaseSmall) in the rufix folder, runs
-`rufix install` in your folder and then `rufix check` on the copy it made
-there. Every install fully reinstalls the rufix entries and keeps foreign
-hooks; `rufix status` reports `stale` when an entry differs from what this
-binary installs. Flag: `--env-files` (hooks also load env files).
+`rufix install` fully reinstalls the rufix entries and keeps foreign hooks;
+`rufix status` reports `stale` when an entry differs from what this binary
+installs. Claude Code reads `.claude/` from the folder it starts in, so run it
+in the repository's root: in a subfolder of a repository (a folder without its
+own `.git` below one that has it) rufix refuses (`rufix install --here` sets up
+that folder anyway, for a package with its own `.claude/`), and `status` and
+`uninstall` refuse alike. A submodule or a nested checkout, which has its own
+`.git`, is a root. Restart Claude Code in the repository to load the hooks and
+the mod.
 
-Run it in the repository's root, the folder that holds `.git`: Claude Code
-reads `.claude/` from the folder it starts in. In a subfolder of a repository
-(a folder without its own `.git` below one that has it) rufix refuses
-(`rufix install --here` sets up that folder anyway, for a package with its own
-`.claude/`); `status`, `check` and `uninstall` refuse alike. A submodule or a
-nested checkout, which has its own `.git`, is a root.
+### Remove
 
-### Coming from a global install
+```bash
+rufix uninstall                            # in a repository: hooks, shell prefix, mod
+/path/to/rufix/install.sh --uninstall      # the machine: binaries and PATH entry
+C:\path\to\rufix\install.cmd --uninstall
+```
 
-Older versions put the binary on the PATH and the hooks into
-`~/.claude/settings.json`. `install.sh --clean-global` (`-CleanGlobal` in
-`install.ps1`) removes exactly that — the hook entries that are rufix's, the
-binaries in `$RUFIX_BIN_DIR` (default `~/.local/bin`, on Windows
-`%LOCALAPPDATA%\rufix\bin`) and the PATH entry — and leaves everything else.
-Do it after re-running the installer in the repositories that used the global
-binary: their hooks call it, and a missing binary blocks every tool call.
-While such hooks remain, `install`, `status` and `check` say so (`rufix
-global: older hooks are still in …`): they would run beside the repository's
-own.
+Take rufix out of the repositories first: once the binary is gone their hooks
+call a missing program, and that blocks every tool call there.
+
+### Coming from older versions
+
+Older versions wrote the hooks into `~/.claude/settings.json`, where they apply
+to every repository, or into a repository's shared `.claude/settings.json`.
+`rufix install` moves the repository ones out. For the user's own file run
+`rufix uninstall --global` once (`install.sh --uninstall` does it too): it
+removes only the hook entries that are rufix's. While such hooks remain,
+`install` and `status` say so (`rufix global: older hooks are still in …`):
+they would run beside the repository's own.
 
 ## Replacement data
 
@@ -208,12 +233,12 @@ walking up from the hook's cwd → `<exe dir>/secrets` →
 
 ```
 rufix hook [--env-files]                       process hook stdin JSON
-rufix install [--env-files] [--here]           set up the current folder (copy, hooks, shell, mod)
+rufix install [--env-files] [--here]           set up the current folder (hooks, shell, mod)
 rufix uninstall                                take that out of the current folder
 rufix uninstall --global                       one-off: remove old hooks from ~/.claude
 rufix redact [--env-files]                     mask stdin to stdout (what the mod calls)
 rufix status                                   installed / stale / not installed
-rufix check [--env-files]                      counts + fake-pattern demo, never real values
+rufix check [--env-files]                      what this binary protects: counts + fake-pattern demo, never real values
 rufix version
 ```
 
@@ -224,7 +249,7 @@ the tool call; hook entries carry `onFailure: "block"`.
 
 ## What rufix does NOT protect
 
-- **Repositories you did not run the installer in**: protection is per
+- **Repositories where you did not run `rufix install`**: protection is per
   repository, and there is no global fallback. Prompts are masked only where
   the mod is installed; CLAUDE.md and earlier conversation history are not
   masked either way.

@@ -161,11 +161,16 @@ The binary run as a process, built with the empty skeleton values. Per case:
 first), then `exit`, `stdout` (JSON compared as a document when it is JSON),
 `stderr` (exact, only recorded for exit 0), `stderr_nonempty` and
 `settings` (resulting files by relative path; a seeded file is compared only
-when listed there, any other settings file must stay absent). `{tmp}` stands
+when listed there, any other settings file must stay absent), `present` and
+`absent` (paths relative to `{tmp}` that must or must not exist afterwards; an
+executable is named without its platform suffix). `{tmp}` stands
 for the temporary root, slash-separated, and the executable suffix is dropped
-from outputs; the binary is at `{tmp}/bin/rufix(.exe)`, the working directory
+from outputs; the binary is at `{tmp}/bin/rufix(.exe)` (the installed one:
+`install` writes this path into the hooks and the shell prefix, and makes the
+`rufix-shell` twin next to it when that is missing), the working directory
 (the repository `install` sets up) is `{tmp}/work`, which holds a `.git`
-folder, `HOME`/`USERPROFILE` is `{tmp}/home`. `cwd` (a path relative to
+folder, `HOME`/`USERPROFILE` is `{tmp}/home`. `install` writes into the
+repository's `.claude/` only. `cwd` (a path relative to
 `{tmp}`, created when missing) starts the case elsewhere, such as in
 `work/pkg`, a subfolder of the repository. A folder with its own `.git` is a
 repository root even when a folder above it has one too: the temporary root

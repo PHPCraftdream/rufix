@@ -15,18 +15,21 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 - Private values move from the skip-worktree `values.go` to
   `secrets/values.zig` (ignored by git); `src/values.zig` is the empty
   committed skeleton.
-- Installation is per repository only. The setup scripts build with
-  `zig build` and run `rufix install` in the current folder, which copies the
-  binary to `.claude/rufix/` and writes the hooks and the shell prefix to
-  `.claude/settings.local.json` and the mod to `.claude/skills/rufix/`; the
-  folders ignore themselves in git. Nothing goes to the PATH or `~/.claude`
-  any more. Flags: `--env-files`, `--revert`, `--clean-global`; `--project`,
-  `--path`, `--shell` and `--mod` are gone (everything is installed). Hooks
-  that older versions wrote to the repository's `.claude/settings.json` are
-  moved out on install and uninstall.
-- `rufix uninstall --global` and `install.sh --clean-global` remove what older
-  versions left outside repositories: their hook entries in
-  `~/.claude/settings.json`, the binaries and the PATH entry.
+- The binary is installed once per machine, the setup is per repository. The
+  setup scripts build with `zig build` and put `rufix` and its `rufix-shell`
+  twin into the bin dir (`$RUFIX_BIN_DIR`) and onto the PATH; they touch no
+  repository. `rufix install`, run in a repository, writes the hooks and the
+  shell prefix to its `.claude/settings.local.json` and the mod to
+  `.claude/skills/rufix/`, naming the installed binary, and never anything
+  under `~/.claude`. Script flag: `--uninstall` (`-Uninstall`); `--project`,
+  `--path`, `--shell` and `--mod` of `rufix install` are gone (everything is
+  set up). Hooks that older versions wrote to the repository's
+  `.claude/settings.json` are moved out on install and uninstall.
+- `rufix uninstall --global` removes the hook entries older versions put into
+  `~/.claude/settings.json`, where they applied to every repository;
+  `install.sh --uninstall` does it too.
+- `rufix check` looks at the binary only (counts and the demo), not at a
+  repository: it prints no settings line and runs in any folder.
 - CI runs `zig build test` and a release build with a size budget.
 
 ### Added
@@ -44,20 +47,25 @@ the project adheres to [Semantic Versioning](https://semver.org/).
   case-preserving rules from a real name and its replacement; the commented
   examples in `src/values.zig` use them. Plain rules still work. The
   expansions are pinned by `conformance/rules`.
-- `rufix install`, `status`, `check` and `uninstall` refuse in a subfolder of a
+- `rufix install`, `status` and `uninstall` refuse in a subfolder of a
   repository (Claude Code reads `.claude/` from the folder it starts in, so
   it would protect nothing); `--here` sets up that folder anyway.
-- `install`, `status` and `check` report hooks of an older global install
-  that are still in `~/.claude/settings.json`.
-- Installer smoke test in CI (`.github/smoke.sh`, and `install.ps1` on
-  Windows): install twice, status, subfolder refusal, git ignoring the binary
-  and the mod, revert and `--clean-global`. `.gitattributes` keeps shell
-  scripts on LF.
+- `install` and `status` report hooks of an older global install that are
+  still in `~/.claude/settings.json`.
+- Installer smoke tests in CI (`.github/smoke.sh`; `.github/smoke.ps1` for
+  `install.ps1` and `install.cmd` on Windows): install on the machine twice
+  and once while rufix runs, the PATH entry (once, then gone), `rufix install`
+  in a scratch repository twice, status, git not seeing the mod, subfolder
+  refusal, `rufix uninstall`, `--uninstall` (stopping on a broken
+  `~/.claude/settings.json`), the clean-up of old global hooks and unknown
+  flags. `.gitattributes` keeps shell scripts on LF.
+- CLI fixtures can name paths that must (`present`) or must not (`absent`)
+  exist: `install` writes only into the repository's `.claude/`.
 - `until_stable` rule field: re-apply a rule while it still changes the text.
 - `rufix redact`: masks all of stdin as one text.
 - Shell wrapper per repository: `rufix install` sets
   `CLAUDE_CODE_SHELL_PREFIX` in the repository's `.claude/settings.local.json`
-  to a `rufix-shell` copy of the binary. Bash tool calls run with stdout and
+  to the `rufix-shell` twin of the installed binary. Bash tool calls run with stdout and
   stderr masked line by line and their exit code kept, so failing commands
   no longer leak; hooks, status line and MCP start-up pass through.
 - PreToolUse restore for the local file tools `Write`, `Edit`, `MultiEdit`,

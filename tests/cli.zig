@@ -71,6 +71,14 @@ fn spawn(a: std.mem.Allocator, argv: []const []const u8, cwd: []const u8, env: *
     return .{ .code = code, .stdout = try reader.toOwnedSlice(0), .stderr = try reader.toOwnedSlice(1) };
 }
 
+/// A path under the temporary root. An executable is written without its
+/// platform suffix in the fixtures, so either name counts.
+fn exists(a: std.mem.Allocator, root: []const u8, rel: []const u8) !bool {
+    const plain = try os.join(a, root, rel);
+    if (os.exists(a, plain)) return true;
+    return os.exists(a, try std.mem.concat(a, u8, &.{ plain, os.exe_suffix }));
+}
+
 const candidates = [_][]const u8{
     "home/.claude/settings.json",
     "work/.claude/settings.json",
@@ -151,6 +159,14 @@ test "cli fixtures" {
                 failures += 1;
             }
         }
+        for (t.array(c, "present")) |p| if (!try exists(a, root, p.string)) {
+            t.fail(name, "missing {s}", .{p.string});
+            failures += 1;
+        };
+        for (t.array(c, "absent")) |p| if (try exists(a, root, p.string)) {
+            t.fail(name, "unexpected {s}", .{p.string});
+            failures += 1;
+        };
     }
     try std.testing.expectEqual(@as(usize, 0), failures);
 }
