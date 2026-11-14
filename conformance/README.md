@@ -167,4 +167,6 @@ from outputs; the binary is at `{tmp}/bin/rufix(.exe)`, the working directory
 (the repository `install` sets up) is `{tmp}/work`, which holds a `.git`
 folder, `HOME`/`USERPROFILE` is `{tmp}/home`. `cwd` (a path relative to
 `{tmp}`, created when missing) starts the case elsewhere, such as in
-`work/pkg`, a subfolder of the repository.
+`work/pkg`, a subfolder of the repository. A folder with its own `.git` is a
+repository root even when a folder above it has one too: the temporary root
+itself lies inside the rufix checkout.

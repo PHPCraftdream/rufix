@@ -53,6 +53,15 @@ pub fn repositoryAbove(a: std.mem.Allocator, start: []const u8, stop: []const u8
     }
 }
 
+/// True for a plain subfolder of a repository: it has no `.git` of its own, but
+/// a folder above does. A folder with its own `.git` is a repository root even
+/// inside another repository (a submodule, a nested checkout).
+pub fn isSubfolder(a: std.mem.Allocator, start: []const u8, stop: []const u8) bool {
+    const own = os.join(a, start, ".git") catch return false;
+    if (os.exists(a, own)) return false;
+    return repositoryAbove(a, start, stop) != null;
+}
+
 /// Writes a self-ignoring .gitignore into `folder`.
 pub fn writeIgnore(a: std.mem.Allocator, folder: []const u8) !void {
     try io.writeFileAtomic(a, try os.join(a, folder, ".gitignore"), ignore_body, .data);

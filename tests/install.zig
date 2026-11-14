@@ -140,4 +140,9 @@ test "repositoryAbove finds the nearest .git above a folder, up to a limit" {
     const inner = try os.join(a, work, "pkg");
     try os.mkdirAll(a, try os.join(a, inner, ".git"));
     try std.testing.expectEqualStrings(inner, local.repositoryAbove(a, deep, root).?);
+    // A subfolder is a plain folder below a repository; one with its own .git
+    // is a root even inside another repository.
+    try std.testing.expect(local.isSubfolder(a, deep, root));
+    try std.testing.expect(!local.isSubfolder(a, inner, root));
+    try std.testing.expect(!local.isSubfolder(a, work, root));
 }
