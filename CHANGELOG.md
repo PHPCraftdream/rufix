@@ -30,7 +30,11 @@ the project adheres to [Semantic Versioning](https://semver.org/).
   `install.sh --uninstall` does it too.
 - `rufix check` looks at the binary only (counts and the demo), not at a
   repository: it prints no settings line and runs in any folder.
-- CI runs `zig build test` and a release build with a size budget.
+- CI runs `zig build test`, a release build with a size budget and the
+  installer smoke tests on Ubuntu, Windows and macOS. The platform layer now
+  knows macOS: the executable path comes from dyld (there is no `/proc`), the
+  directory entries use the macOS layout and the C streams their libSystem
+  names.
 
 ### Added
 

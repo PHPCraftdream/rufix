@@ -1,10 +1,11 @@
 //! Process environment for the CLI: arguments, cwd, environment, home and
 //! executable directories, file existence, directory listing and creation.
-//! Windows uses the wide-character APIs so non-ASCII paths work; Linux uses
-//! libc.
+//! Windows uses the wide-character APIs so non-ASCII paths work; Linux and
+//! macOS use libc.
 const std = @import("std");
 const builtin = @import("builtin");
 pub const windows = builtin.os.tag == .windows;
+const macos = builtin.os.tag == .macos;
 pub const sep: u8 = if (windows) '\\' else '/';
 
 const W = if (windows) struct {
@@ -37,12 +38,19 @@ const P = if (!windows) struct {
     extern "c" fn getcwd([*]u8, usize) ?[*:0]u8;
     extern "c" fn getenv([*:0]const u8) ?[*:0]const u8;
     extern "c" fn readlink([*:0]const u8, [*]u8, usize) isize;
+    extern "c" fn _NSGetExecutablePath([*]u8, *u32) c_int;
+    extern "c" fn realpath([*]const u8, [*]u8) ?[*:0]u8;
     extern "c" fn access([*:0]const u8, c_int) c_int;
     extern "c" fn mkdir([*:0]const u8, c_uint) c_int;
     extern "c" fn opendir([*:0]const u8) ?*anyopaque;
     extern "c" fn readdir(*anyopaque) ?*Dirent;
     extern "c" fn closedir(*anyopaque) c_int;
-    const Dirent = extern struct { ino: u64, off: i64, reclen: u16, kind: u8, name: [256]u8 };
+    // The name sits at a different offset on macOS (seek offset and name
+    // length precede the type), so one layout would read the wrong bytes.
+    const Dirent = if (macos)
+        extern struct { ino: u64, seekoff: u64, reclen: u16, namlen: u16, kind: u8, name: [1024]u8 }
+    else
+        extern struct { ino: u64, off: i64, reclen: u16, kind: u8, name: [256]u8 };
 } else struct {};
 
 const invalid_attributes: u32 = 0xFFFFFFFF;
@@ -116,6 +124,15 @@ pub fn exePath(a: std.mem.Allocator) ![]const u8 {
         const n = W.GetModuleFileNameW(null, &buf, buf.len);
         if (n == 0) return "";
         path = try narrow(a, buf[0..n]);
+    } else if (macos) {
+        // No /proc here: dyld gives the path as it was launched, possibly
+        // relative or through a link; the settings need the absolute one.
+        var raw: [4096]u8 = undefined;
+        var size: u32 = raw.len;
+        if (P._NSGetExecutablePath(&raw, &size) != 0) return "";
+        var real: [4096]u8 = undefined;
+        const resolved = P.realpath(&raw, &real) orelse return "";
+        path = try a.dupe(u8, std.mem.span(resolved));
     } else {
         var buf: [4096]u8 = undefined;
         const n = P.readlink("/proc/self/exe", &buf, buf.len);

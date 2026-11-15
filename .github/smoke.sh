@@ -47,11 +47,14 @@ absent "$scratch/elsewhere/.claude"
 echo "== install again while a copy of rufix is running"
 # A hook may be running when the binary is replaced, and Windows cannot
 # overwrite a running executable: the installer has to move it aside.
-coproc HOLD { exec "$bin/rufix$exe" redact >/dev/null 2>&1; }
-holder="$HOLD_PID"
+# redact reads stdin to its end: it runs until the release file appears (the
+# bound keeps a failed run from leaving the loop behind). No coproc: macOS
+# ships bash 3.2.
+{ n=0; while [ ! -e "$scratch/release" ] && [ "$n" -lt 900 ]; do sleep 0.2; n=$((n + 1)); done; } 2>/dev/null \
+  | "$bin/rufix$exe" redact >/dev/null 2>&1 &
+holder=$!
 (cd "$scratch/elsewhere" && sh "$src/install.sh")
-eval "exec ${HOLD[1]}>&-"
-eval "exec ${HOLD[0]}<&-"
+: > "$scratch/release"
 wait "$holder" 2>/dev/null || true
 "$bin/rufix$exe" version | grep -q "^rufix " || fail "the reinstalled binary does not run"
 [ "$(pathlines)" = "1" ] || fail "expected one PATH line, found $(pathlines)"
