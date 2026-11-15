@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
           zig build
           binary=zig-out/bin/rufix
           if [ -f zig-out/bin/rufix.exe ]; then binary=zig-out/bin/rufix.exe; fi
-          size=$(wc -c < "$binary")
+          size=$(wc -c < "$binary" | tr -d ' ')
           echo "release binary: $size bytes"
           test "$size" -le 307200
           "$binary" version

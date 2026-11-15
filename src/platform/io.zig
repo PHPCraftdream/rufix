@@ -20,9 +20,18 @@ extern "c" fn _setmode(c_int, c_int) c_int;
 extern "c" var stdin: *anyopaque;
 extern "c" var stdout: *anyopaque;
 extern "c" var stderr: *anyopaque;
+// libSystem names the three streams differently.
+extern "c" var __stdinp: *anyopaque;
+extern "c" var __stdoutp: *anyopaque;
+extern "c" var __stderrp: *anyopaque;
 
 fn stream(n: c_uint) *anyopaque {
     if (windows) return __acrt_iob_func(n);
+    if (builtin.os.tag == .macos) return switch (n) {
+        0 => __stdinp,
+        1 => __stdoutp,
+        else => __stderrp,
+    };
     return switch (n) {
         0 => stdin,
         1 => stdout,

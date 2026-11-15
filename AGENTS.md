@@ -37,7 +37,7 @@ secrets/                  ignored by git: secrets/values.zig, local builds
 ## Commands
 
 ```bash
-zig build test      # every suite; must pass on Windows and Linux
+zig build test      # every suite; must pass on Windows, Linux and macOS
 zig build           # release binary in zig-out/bin
 ```
 
@@ -127,6 +127,6 @@ Run `zig build test` after every change.
 
 `.github/workflows/ci.yml` runs `zig build test`, a release build with a
 size budget and the installer smoke tests (`.github/smoke.sh`, plus
-`.github/smoke.ps1` for `install.ps1` and `install.cmd` on Windows) on Ubuntu
-and Windows. A change to the installers or to what `rufix install` writes
+`.github/smoke.ps1` for `install.ps1` and `install.cmd` on Windows) on Ubuntu,
+Windows and macOS. A change to the installers or to what `rufix install` writes
 needs `bash .github/smoke.sh` (and `smoke.ps1`) to stay green.
