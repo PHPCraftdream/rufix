@@ -54,7 +54,7 @@ if ($Uninstall) {
     & $target uninstall --global
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   }
-  Remove-Item -Force -ErrorAction SilentlyContinue $target, $twin, "$target.old", "$twin.old"
+  Remove-Item -Force -ErrorAction SilentlyContinue $target, $twin, "$target.old*", "$twin.old*"
   Remove-EmptyDir $bin
   if (-not $env:RUFIX_BIN_DIR) { Remove-EmptyDir (Split-Path $bin -Parent) }
   $entries = @((Get-RawUserPath).Split(";") | Where-Object { $_ })
@@ -83,11 +83,17 @@ try {
 $built = Join-Path $src "zig-out\bin\rufix.exe"
 New-Item -ItemType Directory -Force -Path $bin | Out-Null
 
-# A running hook keeps its executable open: move it aside instead of overwriting.
+# A running hook keeps its executable open: move it aside instead of overwriting,
+# under a name of its own, since an earlier one may still be running and stay.
 function Place([string]$from, [string]$to) {
-  if (Test-Path $to) { Move-Item -Force $to "$to.old" }
+  Remove-Item -Force -ErrorAction SilentlyContinue "$to.old*"
+  if (Test-Path $to) {
+    $aside = "$to.old"
+    if (Test-Path $aside) { $aside = "$to.old." + [guid]::NewGuid().ToString("N").Substring(0, 8) }
+    Move-Item -Force $to $aside
+  }
   Copy-Item $from $to
-  Remove-Item -Force -ErrorAction SilentlyContinue "$to.old"
+  Remove-Item -Force -ErrorAction SilentlyContinue "$to.old*"
 }
 Place $built $target
 Place $built $twin

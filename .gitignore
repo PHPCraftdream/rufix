@@ -11,3 +11,6 @@ zig-out/
 
 # Local Claude Code setup written by `rufix install`: holds machine paths
 .claude/
+
+# Session checkpoints name machine paths: never commit them
+docs/checkpoints/

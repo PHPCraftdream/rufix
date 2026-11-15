@@ -2,6 +2,7 @@
 //! Windows), which keeps the executable small.
 const std = @import("std");
 const builtin = @import("builtin");
+const os = @import("os.zig");
 const windows = builtin.os.tag == .windows;
 
 extern "c" fn fread([*]u8, usize, usize, *anyopaque) usize;
@@ -121,12 +122,38 @@ pub fn copyExecutable(a: std.mem.Allocator, src: []const u8, target: []const u8)
 
 pub const Mode = enum { data, executable };
 
+/// Names a running executable is moved to, in turn: a copy still running from
+/// an earlier update keeps its name and blocks the next one.
+const aside_suffixes = [_][]const u8{ ".old", ".old1", ".old2", ".old3", ".old4" };
+
+fn moveAside(a: std.mem.Allocator, from: [:0]const u16, path: []const u8) !void {
+    for (aside_suffixes) |suffix| {
+        const old = try wide(a, try std.mem.concat(a, u8, &.{ path, suffix }));
+        _ = _wremove(old);
+        if (_wrename(from, old) == 0) return;
+    }
+    os.failed_path = path;
+    return error.RenameFailed;
+}
+
+fn removeAside(a: std.mem.Allocator, path: []const u8) void {
+    for (aside_suffixes) |suffix| {
+        const old = std.mem.concat(a, u8, &.{ path, suffix }) catch return;
+        _ = _wremove(wide(a, old) catch return);
+    }
+}
+
 /// Writes through a temporary file renamed over the target. An executable
-/// copy gets mode 0755 on POSIX; fopen alone would leave it unrunnable.
-pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8, mode: Mode) !void {
+/// copy gets mode 0755 on POSIX; fopen alone would leave it unrunnable. A
+/// symlink is followed, so the link itself survives.
+pub fn writeFileAtomic(a: std.mem.Allocator, requested: []const u8, data: []const u8, mode: Mode) !void {
+    const path = os.resolveLinks(a, requested);
     const tmp = try std.mem.concat(a, u8, &.{ path, ".rufix-tmp" });
     {
-        const f = try open(a, tmp, "wb") orelse return error.OpenFailed;
+        const f = try open(a, tmp, "wb") orelse {
+            os.failed_path = tmp;
+            return error.OpenFailed;
+        };
         defer _ = fclose(f);
         try writeAll(f, data);
     }
@@ -134,16 +161,21 @@ pub fn writeFileAtomic(a: std.mem.Allocator, path: []const u8, data: []const u8,
         const wp = try wide(a, path);
         // A running executable cannot be deleted but can be renamed: move it
         // aside, so the update lands while Claude Code still runs the old copy.
-        if (_wremove(wp) != 0) {
-            const old = try wide(a, try std.mem.concat(a, u8, &.{ path, ".old" }));
-            _ = _wremove(old);
-            _ = _wrename(wp, old);
+        if (_wremove(wp) != 0 and os.exists(a, path)) try moveAside(a, wp, path);
+        if (_wrename(try wide(a, tmp), wp) != 0) {
+            os.failed_path = path;
+            return error.RenameFailed;
         }
-        if (_wrename(try wide(a, tmp), wp) != 0) return error.RenameFailed;
-        _ = _wremove(try wide(a, try std.mem.concat(a, u8, &.{ path, ".old" })));
+        removeAside(a, path);
     } else {
         const ztmp = try a.dupeZ(u8, tmp);
-        if (mode == .executable and chmod(ztmp, 0o755) != 0) return error.ChmodFailed;
-        if (rename(ztmp, try a.dupeZ(u8, path)) != 0) return error.RenameFailed;
+        if (mode == .executable and chmod(ztmp, 0o755) != 0) {
+            os.failed_path = tmp;
+            return error.ChmodFailed;
+        }
+        if (rename(ztmp, try a.dupeZ(u8, path)) != 0) {
+            os.failed_path = path;
+            return error.RenameFailed;
+        }
     }
 }

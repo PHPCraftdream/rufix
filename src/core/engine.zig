@@ -7,6 +7,9 @@ pub const Exact = struct {
     value: []const u8,
     placeholder: []const u8,
     host: bool,
+    /// Replaced only where no letter, digit or `_` touches it: a one-word host
+    /// name such as `prod` is not the `prod` inside `production`.
+    whole_word: bool = false,
 };
 
 pub const Var = struct { key: []const u8, value: []const u8 };
@@ -53,7 +56,7 @@ pub fn compileRules(a: std.mem.Allocator, specs: []const RuleSpec, failed: *usiz
 pub fn secretKey(key: []const u8) bool {
     var it = std.mem.tokenizeAny(u8, key, "_-");
     while (it.next()) |part| {
-        for ([_][]const u8{ "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PAT", "KEY", "CREDENTIAL", "CREDENTIALS" }) |w| {
+        for ([_][]const u8{ "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PASS", "PWD", "PAT", "KEY", "COOKIE", "BEARER", "CREDENTIAL", "CREDENTIALS" }) |w| {
             if (std.ascii.eqlIgnoreCase(part, w)) return true;
         }
     }
@@ -71,10 +74,24 @@ fn isProtectedHost(v: []const u8) bool {
     return std.mem.indexOfScalar(u8, v, '.') != null and std.mem.indexOfAny(u8, v, " \t\n") == null;
 }
 
+fn isWordByte(c: u8) bool {
+    return c == '_' or std.ascii.isAlphanumeric(c);
+}
+
+/// A URL part that is one plain word (`prod`, `jira-2`), as opposed to a
+/// dotted host or a whole URL.
+fn isOneWord(v: []const u8) bool {
+    if (v.len == 0) return false;
+    for (v) |c| if (!isWordByte(c) and c != '-') return false;
+    return true;
+}
+
 /// Derives the protected values from variables:
 /// names in byte order; credentials (6+ bytes) or URL parts; longest first,
 /// ties by value. Only URL-derived values can be host evidence, and a value
-/// that is also a credential never is.
+/// that is also a credential never is. Two different values with one
+/// placeholder are `error.PlaceholderCollision`: silently keeping one of them
+/// would leave the other in the clear.
 pub fn buildExact(a: std.mem.Allocator, vars_in: []const Var) ![]const Exact {
     const url = @import("url.zig");
     const vars = try a.dupe(Var, vars_in);
@@ -89,13 +106,17 @@ pub fn buildExact(a: std.mem.Allocator, vars_in: []const Var) ![]const Exact {
             if (value.len < 4 or std.mem.indexOfScalar(u8, value, '\n') != null) return;
             const p = try placeholder(al, value);
             const host = from_url and isProtectedHost(value);
+            // A credential that is also a short host stays everywhere it is.
+            const whole = from_url and isOneWord(value);
             for (l.items) |*e| {
                 if (std.mem.eql(u8, e.placeholder, p)) {
+                    if (!std.mem.eql(u8, e.value, value)) return error.PlaceholderCollision;
                     e.host = e.host and host;
+                    e.whole_word = e.whole_word and whole;
                     return;
                 }
             }
-            try l.append(al, .{ .value = value, .placeholder = p, .host = host });
+            try l.append(al, .{ .value = value, .placeholder = p, .host = host, .whole_word = whole });
         }
     }.f;
     var last_key: ?[]const u8 = null;
@@ -151,7 +172,7 @@ pub const Store = struct {
         var s = input;
         var count: usize = 0;
         for (st.exact) |e| {
-            const r = try replaceExact(st.gpa, s, e.value, e.placeholder);
+            const r = try replaceExact(st.gpa, s, e.value, e.placeholder, e.whole_word);
             s = r.out;
             count += r.count;
         }
@@ -198,7 +219,7 @@ pub const Store = struct {
     pub fn restore(st: *Store, input: []const u8) !Result {
         var r = try st.restoreDomains(input);
         for (st.exact) |e| {
-            const x = try replaceExact(st.gpa, r.out, e.placeholder, e.value);
+            const x = try replaceExact(st.gpa, r.out, e.placeholder, e.value, false);
             r.out = x.out;
             r.count += x.count;
         }
@@ -263,18 +284,26 @@ pub const Store = struct {
     }
 };
 
-fn replaceExact(gpa: std.mem.Allocator, s: []const u8, old: []const u8, new: []const u8) !Store.Result {
-    var start = std.mem.indexOf(u8, s, old) orelse return .{ .out = s, .count = 0 };
+/// Replaces `old` left to right without overlap; with `whole_word`, only where
+/// no word character touches it.
+fn replaceExact(gpa: std.mem.Allocator, s: []const u8, old: []const u8, new: []const u8, whole_word: bool) !Store.Result {
     var out: std.ArrayList(u8) = .empty;
     var last: usize = 0;
     var count: usize = 0;
-    while (true) {
-        try out.appendSlice(gpa, s[last..start]);
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, s, from, old)) |at| {
+        const end = at + old.len;
+        if (whole_word and ((at > 0 and isWordByte(s[at - 1])) or (end < s.len and isWordByte(s[end])))) {
+            from = at + 1;
+            continue;
+        }
+        try out.appendSlice(gpa, s[last..at]);
         try out.appendSlice(gpa, new);
-        last = start + old.len;
+        last = end;
+        from = end;
         count += 1;
-        start = last + (std.mem.indexOf(u8, s[last..], old) orelse break);
     }
+    if (count == 0) return .{ .out = s, .count = 0 };
     try out.appendSlice(gpa, s[last..]);
     return .{ .out = out.items, .count = count };
 }

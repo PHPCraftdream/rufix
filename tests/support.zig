@@ -158,6 +158,12 @@ pub fn tempDir(a: std.mem.Allocator) ![]const u8 {
     return path;
 }
 
+/// Removes a folder made by tempDir (each holds a copy of the binary, so they
+/// add up); what cannot go is left.
+pub fn removeTree(path: []const u8) void {
+    std.Io.Dir.cwd().deleteTree(std.testing.io, path) catch {};
+}
+
 pub fn fail(name: []const u8, comptime fmt: []const u8, args: anytype) void {
     std.debug.print("FAIL {s}: " ++ fmt ++ "\n", .{name} ++ args);
 }

@@ -1,5 +1,6 @@
 //! Claude Code hook contract: returns the exit code,
-//! 0 or 2; on 2 nothing is written to stdout.
+//! 0 or 2; on 2 nothing is written to stdout. A failure on PostToolUse is
+//! answered with a withheld output (see `failed`), exit 0.
 const std = @import("std");
 const json = @import("../core/json.zig");
 const engine = @import("../core/engine.zig");
@@ -140,6 +141,50 @@ pub fn blocking(a: std.mem.Allocator, out: *Output, msg: []const u8) u8 {
     return 2;
 }
 
+const withheld_text = "[rufix: output withheld because masking failed]";
+
+/// `v` with every string replaced by the notice: the shape stays, so Claude
+/// Code takes it in place of the original. Keys stay too (a built-in tool's
+/// keys are its schema).
+fn withholdStrings(a: std.mem.Allocator, v: json.Value) !json.Value {
+    switch (v) {
+        .string => return .{ .string = withheld_text },
+        .array => |arr| {
+            const copy = try json.newArray(a);
+            for (arr.items.items) |item| try copy.items.append(a, try withholdStrings(a, item));
+            return .{ .array = copy };
+        },
+        .object => |obj| {
+            const copy = try json.newObject(a);
+            for (obj.keys.items, obj.vals.items) |k, val| {
+                try copy.keys.append(a, k);
+                try copy.vals.append(a, try withholdStrings(a, val));
+            }
+            return .{ .object = copy };
+        },
+        else => return v,
+    }
+}
+
+/// What a failure turns into. A PreToolUse call is blocked (exit 2). On
+/// PostToolUse the tool has already run and exit 2 blocks nothing, the original
+/// output would reach the model: it is replaced instead, with the same shape and
+/// every string a notice (an MCP result, whose keys may carry data, becomes the
+/// notice alone). Exit 2 remains where there is no output to replace or the
+/// replacement cannot be made.
+pub fn failed(a: std.mem.Allocator, req: Request, out: *Output, msg: []const u8) u8 {
+    if (!std.mem.eql(u8, req.event, "PostToolUse") or req.response == .null) return blocking(a, out, msg);
+    out.stdout.clearRetainingCapacity();
+    const mcp = std.mem.startsWith(u8, req.tool, "mcp__");
+    const replacement = if (mcp)
+        json.Value{ .string = withheld_text }
+    else
+        withholdStrings(a, req.response) catch return blocking(a, out, msg);
+    emit(a, out, "PostToolUse", if (mcp) "updatedMCPToolOutput" else "updatedToolOutput", replacement) catch return blocking(a, out, msg);
+    note(a, out, "rufix: masking failed ({s}); the output of {s} was withheld\n", .{ msg, req.tool });
+    return 0;
+}
+
 pub fn run(a: std.mem.Allocator, st: *engine.Store, stdin: []const u8, out: *Output) u8 {
     const req = decodeRequest(a, stdin) catch |err| return blocking(a, out, @errorName(err));
     return handle(a, st, req, out);
@@ -148,7 +193,7 @@ pub fn run(a: std.mem.Allocator, st: *engine.Store, stdin: []const u8, out: *Out
 /// Runs a decoded request; the CLI decodes first to learn the cwd for
 /// env-file resolution.
 pub fn handle(a: std.mem.Allocator, st: *engine.Store, req: Request, out: *Output) u8 {
-    return handleInner(a, st, req, out) catch |err| blocking(a, out, @errorName(err));
+    return handleInner(a, st, req, out) catch |err| failed(a, req, out, @errorName(err));
 }
 
 fn note(a: std.mem.Allocator, out: *Output, comptime fmt: []const u8, args: anytype) void {

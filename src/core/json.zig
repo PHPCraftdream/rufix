@@ -62,10 +62,16 @@ pub fn newArray(a: std.mem.Allocator) !*Array {
 
 pub const Error = error{ SyntaxError, OutOfMemory };
 
+/// Arrays and objects nest this deep at most: the parser, the walks over the
+/// result and the writer recurse, and a deep enough input would otherwise end
+/// the process on a stack overflow instead of a clean error.
+pub const max_depth = 512;
+
 pub const Parser = struct {
     a: std.mem.Allocator,
     s: []const u8,
     i: usize = 0,
+    depth: u32 = 0,
 
     fn ws(p: *Parser) void {
         while (p.i < p.s.len) : (p.i += 1) {
@@ -126,6 +132,8 @@ pub const Parser = struct {
 
     fn hex4(p: *Parser) Error!u21 {
         if (p.i + 4 > p.s.len) return error.SyntaxError;
+        // parseInt alone would take a sign here.
+        for (p.s[p.i .. p.i + 4]) |c| if (!std.ascii.isHex(c)) return error.SyntaxError;
         const v = std.fmt.parseInt(u16, p.s[p.i .. p.i + 4], 16) catch return error.SyntaxError;
         p.i += 4;
         return v;
@@ -202,6 +210,9 @@ pub const Parser = struct {
     }
 
     fn array(p: *Parser) Error!Value {
+        if (p.depth >= max_depth) return error.SyntaxError;
+        p.depth += 1;
+        defer p.depth -= 1;
         p.i += 1;
         const arr = try newArray(p.a);
         p.ws();
@@ -226,6 +237,9 @@ pub const Parser = struct {
     }
 
     fn object(p: *Parser) Error!Value {
+        if (p.depth >= max_depth) return error.SyntaxError;
+        p.depth += 1;
+        defer p.depth -= 1;
         p.i += 1;
         const obj = try newObject(p.a);
         p.ws();

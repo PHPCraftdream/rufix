@@ -21,7 +21,8 @@ absent() { [ ! -e "$1" ] || fail "still there: $1"; }
 if [ -z "$exe" ]; then
   export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$(zig env | grep -o '"global_cache_dir": *"[^"]*"' | sed 's/.*: *"//; s/"$//')}"
 fi
-home="$scratch/home"
+# A space in the home folder: the profile files are found by path, not by word.
+home="$scratch/home dir"
 bin="$scratch/bin"
 mkdir -p "$home/.claude" "$scratch/elsewhere"
 export HOME="$home"
@@ -43,6 +44,10 @@ done
 [ "$(pathlines)" = "1" ] || fail "expected one PATH line, found $(pathlines)"
 grep -q 'FOREIGN=1' "$home/.profile" || fail "a foreign profile line was lost"
 absent "$scratch/elsewhere/.claude"
+# zsh does not read .profile, and macOS runs zsh: its file is made for it.
+if [ "$(uname -s)" = "Darwin" ]; then
+  grep -qF "rufix: binary on the PATH" "$home/.zshrc" || fail "no PATH line in .zshrc on macOS"
+fi
 
 echo "== install again while a copy of rufix is running"
 # A hook may be running when the binary is replaced, and Windows cannot

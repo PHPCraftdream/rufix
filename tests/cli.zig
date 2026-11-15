@@ -95,6 +95,7 @@ test "cli fixtures" {
     for (try t.cases(a, "cli")) |c| {
         const name = t.str(c, "name");
         const root = try t.tempDir(a);
+        defer t.removeTree(root);
         const slash = try os.toSlash(a, root);
         for ([_][]const u8{ "bin", "home", "work" }) |d| try os.mkdirAll(a, try os.join(a, root, d));
         // `work` is a repository root, as a real project is; a case may start
@@ -126,8 +127,12 @@ test "cli fixtures" {
         const stdout = try portable(a, try normalize(a, r.stdout, root));
         const stderr = try portable(a, try normalize(a, r.stderr, root));
         const want_out = try portable(a, t.str(c, "stdout"));
-        const same_out = std.mem.eql(u8, stdout, want_out) or
-            (want_out.len > 0 and t.equalText(a, stdout, json.parseAll(a, want_out) catch .null));
+        // A JSON expectation matches the same document however it is spaced; a
+        // text one must match exactly (empty output is not a JSON null).
+        const same_out = std.mem.eql(u8, stdout, want_out) or blk: {
+            const want_json = json.parseAll(a, want_out) catch break :blk false;
+            break :blk t.equalText(a, stdout, want_json);
+        };
         if (r.code != (t.int(c, "exit") orelse -1) or !same_out) {
             t.fail(name, "exit {d} stdout {s}; want exit {d} stdout {s}", .{ r.code, stdout, t.int(c, "exit") orelse -1, want_out });
             failures += 1;

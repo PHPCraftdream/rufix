@@ -23,6 +23,20 @@ fn localPath(a: std.mem.Allocator, settings_path: []const u8) ![]const u8 {
 const load = settingsfile.load;
 const save = settingsfile.save;
 
+/// What `install` would refuse, found before anything is written: the hooks
+/// share this file, and a half-done install is worse than none.
+pub fn check(a: std.mem.Allocator, settings_path: []const u8) !void {
+    const settings = try load(a, try localPath(a, settings_path));
+    const env_v = settings.get("env") orelse return;
+    switch (env_v) {
+        .null => {},
+        .object => |env| if (env.get(prefix_key)) |v| {
+            if (v != .string or !isOurs(v.string)) return error.ForeignShellPrefix;
+        },
+        else => return error.EnvNotAnObject,
+    }
+}
+
 pub fn install(a: std.mem.Allocator, settings_path: []const u8, exe_path: []const u8, env_files: bool) ![]const u8 {
     const target = try shellExe(a, os.dir(exe_path));
     // Never overwritten: another repository's session may be running it, and

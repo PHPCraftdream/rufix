@@ -6,6 +6,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 pub const windows = builtin.os.tag == .windows;
 const macos = builtin.os.tag == .macos;
+
+/// The path an OS call failed on, so the error can say where. Set just before
+/// the error is returned; only errors of that kind read it.
+pub var failed_path: []const u8 = "";
 pub const sep: u8 = if (windows) '\\' else '/';
 
 const W = if (windows) struct {
@@ -320,7 +324,20 @@ extern "c" fn rmdir([*:0]const u8) c_int;
 pub fn remove(a: std.mem.Allocator, path: []const u8) !void {
     if (!exists(a, path)) return;
     const failed = if (windows) _wremove(try wide(a, path)) != 0 else unlink(try a.dupeZ(u8, path)) != 0;
-    if (failed) return error.RemoveFailed;
+    if (failed) {
+        failed_path = path;
+        return error.RemoveFailed;
+    }
+}
+
+/// Where a write to `path` should land: the file a symlink leads to, so a
+/// settings file kept under a dotfile manager stays a link; else `path` itself.
+pub fn resolveLinks(a: std.mem.Allocator, path: []const u8) []const u8 {
+    if (windows) return path;
+    const z = a.dupeZ(u8, path) catch return path;
+    var buf: [4096]u8 = undefined;
+    const real = P.realpath(z.ptr, &buf) orelse return path;
+    return a.dupe(u8, std.mem.span(real)) catch path;
 }
 
 /// Removes a directory only when it is empty; anything else leaves it.
@@ -339,9 +356,12 @@ pub fn mkdirAll(a: std.mem.Allocator, path: []const u8) !void {
     if (path.len == 0 or exists(a, path)) return;
     const parent = dir(path);
     if (!std.mem.eql(u8, parent, path)) try mkdirAll(a, parent);
-    if (windows) {
-        if (W.CreateDirectoryW(try wide(a, path), null) == 0 and !exists(a, path)) return error.MkdirFailed;
-    } else {
-        if (P.mkdir(try a.dupeZ(u8, path), 0o755) != 0 and !exists(a, path)) return error.MkdirFailed;
+    const failed = if (windows)
+        W.CreateDirectoryW(try wide(a, path), null) == 0
+    else
+        P.mkdir(try a.dupeZ(u8, path), 0o755) != 0;
+    if (failed and !exists(a, path)) {
+        failed_path = path;
+        return error.MkdirFailed;
     }
 }

@@ -73,13 +73,12 @@ const usage =
 
 // ---------- flags (-name, --name, -name=value; bools take true/false) ----------
 
-const FlagSpec = struct { name: []const u8, is_bool: bool };
-
 const Flags = struct {
     bools: std.StringHashMap(bool),
-    strings: std.StringHashMap([]const u8),
     rest: []const []const u8,
 };
+
+const env_files_flag = [_][]const u8{"env-files"};
 
 fn parseBool(v: []const u8) ?bool {
     for ([_][]const u8{ "1", "t", "T", "TRUE", "true", "True" }) |x| if (std.mem.eql(u8, v, x)) return true;
@@ -87,8 +86,9 @@ fn parseBool(v: []const u8) ?bool {
     return null;
 }
 
-fn parseFlags(a: std.mem.Allocator, args: []const []const u8, specs: []const FlagSpec) !Flags {
-    var f = Flags{ .bools = .init(a), .strings = .init(a), .rest = &.{} };
+/// Every flag is a bool, named in `known`; the rest of the arguments follow.
+fn parseFlags(a: std.mem.Allocator, args: []const []const u8, known: []const []const u8) !Flags {
+    var f = Flags{ .bools = .init(a), .rest = &.{} };
     var i: usize = 0;
     while (i < args.len) {
         const arg = args[i];
@@ -108,20 +108,11 @@ fn parseFlags(a: std.mem.Allocator, args: []const []const u8, specs: []const Fla
             value = name[eq + 1 ..];
             name = name[0..eq];
         }
-        const spec = for (specs) |s| {
-            if (std.mem.eql(u8, s.name, name)) break s;
+        const flag = for (known) |k| {
+            if (std.mem.eql(u8, k, name)) break k;
         } else return error.UnknownFlag;
-        if (spec.is_bool) {
-            const b = if (value) |v| parseBool(v) orelse return error.InvalidFlagValue else true;
-            try f.bools.put(spec.name, b);
-        } else {
-            if (value == null) {
-                if (i >= args.len) return error.MissingFlagValue;
-                value = args[i];
-                i += 1;
-            }
-            try f.strings.put(spec.name, value.?);
-        }
+        const b = if (value) |v| parseBool(v) orelse return error.InvalidFlagValue else true;
+        try f.bools.put(flag, b);
     }
     f.rest = args[i..];
     return f;
@@ -130,7 +121,7 @@ fn parseFlags(a: std.mem.Allocator, args: []const []const u8, specs: []const Fla
 // ---------- store ----------
 
 fn compiledVars(a: std.mem.Allocator, base: []const engine.Var) ![]const engine.Var {
-    // Compiled values override external files (secretvalues.Overlay).
+    // A compiled value overrides an external one of the same name.
     var out: std.ArrayList(engine.Var) = .empty;
     for (base) |v| {
         var overridden = false;
@@ -143,9 +134,12 @@ fn compiledVars(a: std.mem.Allocator, base: []const engine.Var) ![]const engine.
     return out.items;
 }
 
+/// Index of the compiled filter that did not compile: the error names the
+/// filter by its place in values.zig, never by its text.
+var bad_filter: usize = 0;
+
 fn buildStore(a: std.mem.Allocator, vars: []const engine.Var) !engine.Store {
-    var failed: usize = 0;
-    const rules = engine.compileRules(a, &compiled_rules, &failed) catch |err| {
+    const rules = engine.compileRules(a, &compiled_rules, &bad_filter) catch |err| {
         if (err == error.OutOfMemory) return err;
         return error.InvalidFilter;
     };
@@ -155,7 +149,7 @@ fn buildStore(a: std.mem.Allocator, vars: []const engine.Var) !engine.Store {
 // ---------- commands ----------
 
 fn runHook(a: std.mem.Allocator, args: []const []const u8) u8 {
-    const flags = parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }}) catch |err| {
+    const flags = parseFlags(a, args, &env_files_flag) catch |err| {
         io.writeStderr(std.fmt.allocPrint(a, "rufix: {s}\n", .{@errorName(err)}) catch "rufix: bad flags\n");
         return 2;
     };
@@ -179,25 +173,23 @@ fn hookInner(a: std.mem.Allocator, env_files: bool, out: *hook.Output) u8 {
     if (env_files) {
         const exe = os.exeDir(a) catch "";
         const home = os.home(a) catch "";
-        const path = envfile.resolve(a, req.cwd, exe, home) catch return hook.blocking(a, out, "resolve secrets");
+        const path = envfile.resolve(a, req.cwd, exe, home) catch return hook.failed(a, req, out, "resolve secrets");
         if (path.len > 0) {
             base = envfile.load(a, path) catch |err| {
-                return hook.blocking(a, out, std.fmt.allocPrint(a, "load secrets {s}: {s}", .{ path, @errorName(err) }) catch "load secrets");
+                return hook.failed(a, req, out, std.fmt.allocPrint(a, "load secrets {s}: {s}", .{ path, @errorName(err) }) catch "load secrets");
             };
         } else {
             out.stderr.appendSlice(a, "rufix: secrets file not found; using compiled values with format rules\n") catch {};
         }
     }
-    const vars = compiledVars(a, base) catch return hook.blocking(a, out, "out of memory");
-    var st = buildStore(a, vars) catch |err| return hook.blocking(a, out, @errorName(err));
+    // From here on the request is known: a failure of ours still has to keep
+    // the original tool output away from the model (see hook.failed).
+    const vars = compiledVars(a, base) catch return hook.failed(a, req, out, "out of memory");
+    var st = buildStore(a, vars) catch |err| return hook.failed(a, req, out, message(a, err));
     return hook.handle(a, &st, req, out);
 }
 
-const settings_flags = [_]FlagSpec{
-    .{ .name = "global", .is_bool = true },
-    .{ .name = "here", .is_bool = true },
-    .{ .name = "env-files", .is_bool = true },
-};
+const settings_flags = [_][]const u8{ "global", "here", "env-files" };
 
 const Settings = struct {
     o: install.Options,
@@ -238,7 +230,7 @@ fn legacyHooks(a: std.mem.Allocator, out: *std.ArrayList(u8), repo: []const u8) 
     const path = try local.sharedSettings(a, repo);
     if (!os.exists(a, path)) return;
     const r = install.uninstall(a, .{ .path = path, .exe_dir = "" }) catch |err| {
-        return say(a, out, "legacy", try std.fmt.allocPrint(a, "{s} left alone: {s}", .{ path, message(err) }));
+        return say(a, out, "legacy", try std.fmt.allocPrint(a, "{s} left alone: {s}", .{ path, message(a, err) }));
     };
     if (std.mem.startsWith(u8, r, "removed")) try say(a, out, "legacy", r);
 }
@@ -265,6 +257,9 @@ fn runSettings(a: std.mem.Allocator, action: []const u8, args: []const []const u
     if (installing) {
         // The hooks, the shell prefix and the mod name the installed binary.
         const exe = try os.exePath(a);
+        // Refuse before the first write: hooks without the shell prefix (or the
+        // mod) would be a protection the user thinks is whole.
+        try shellinstall.check(a, o.path);
         try say(a, &out, action, try install.install(a, o));
         try legacyHooks(a, &out, s.repo);
         try out.appendSlice(a, "rufix note: [S:xxxxxxxx] in tool output is a redacted value; it resolves automatically when a Bash command or local file-tool call references a protected host.\n");
@@ -303,7 +298,7 @@ fn loadStore(a: std.mem.Allocator, env_files: bool, start: []const u8) !engine.S
 
 /// Masks all of stdin as one text (multi-line rules apply), for the mod.
 fn runRedact(a: std.mem.Allocator, args: []const []const u8) !void {
-    const f = try parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }});
+    const f = try parseFlags(a, args, &env_files_flag);
     if (f.rest.len != 0) return error.UnexpectedFilterArguments;
     var st = try loadStore(a, f.bools.get("env-files") orelse false, try os.cwd(a));
     const r = try st.redact(try io.readStdin(a));
@@ -311,7 +306,7 @@ fn runRedact(a: std.mem.Allocator, args: []const []const u8) !void {
 }
 
 fn runFilter(a: std.mem.Allocator, args: []const []const u8) !void {
-    const f = try parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }});
+    const f = try parseFlags(a, args, &env_files_flag);
     if (f.rest.len != 0) return error.UnexpectedFilterArguments;
     const env_files = (f.bools.get("env-files") orelse false) or
         std.mem.eql(u8, try os.getenv(a, shellinstall.env_files_key), "1");
@@ -323,7 +318,7 @@ fn runFilter(a: std.mem.Allocator, args: []const []const u8) !void {
 /// the binary only, not at any repository, so the installer can run it
 /// anywhere; `status` reports a repository.
 fn runCheck(a: std.mem.Allocator, args: []const []const u8) !void {
-    const f = try parseFlags(a, args, &.{.{ .name = "env-files", .is_bool = true }});
+    const f = try parseFlags(a, args, &env_files_flag);
     if (f.rest.len != 0) return error.UnexpectedSettingsArguments;
     var out: std.ArrayList(u8) = .empty;
     var base: []const engine.Var = &.{};
@@ -354,7 +349,7 @@ fn runCheck(a: std.mem.Allocator, args: []const []const u8) !void {
     try io.writeStdout(out.items);
 }
 
-fn message(err: anyerror) []const u8 {
+fn message(a: std.mem.Allocator, err: anyerror) []const u8 {
     return switch (err) {
         error.InsideRepository => "this folder is inside a repository: run rufix in the folder that holds .git (--here sets up this folder anyway)",
         error.GlobalIsCleanupOnly => "rufix is set up per repository, never in ~/.claude; --global only removes what older versions left there (uninstall, status)",
@@ -363,15 +358,27 @@ fn message(err: anyerror) []const u8 {
         error.HooksNotAnObject => "settings \"hooks\" is not an object; fix it by hand",
         error.EventNotAList => "a settings hooks event is not a list; fix it by hand",
         error.SyntaxError => "settings file is not valid JSON",
-        error.UnknownFlag, error.BadFlagSyntax, error.InvalidFlagValue, error.MissingFlagValue => "invalid flags",
+        error.UnknownFlag, error.BadFlagSyntax, error.InvalidFlagValue => "invalid flags",
         error.UnexpectedSettingsArguments => "unexpected settings arguments",
-        error.InvalidFilter => "a compiled filter does not compile",
+        error.InvalidFilter => std.fmt.allocPrint(a, "compiled filter {d} of values.zig (counting from 0) does not compile", .{bad_filter}) catch "a compiled filter does not compile",
+        error.PlaceholderCollision => "two different protected values share one [S:...] placeholder; change one of them",
         else => @errorName(err),
     };
 }
 
+/// An error from a failed file or folder operation says which path it was.
+fn failedOnPath(err: anyerror) bool {
+    return err == error.OpenFailed or err == error.RenameFailed or err == error.ChmodFailed or
+        err == error.MkdirFailed or err == error.RemoveFailed;
+}
+
 fn fatal(a: std.mem.Allocator, err: anyerror) u8 {
-    io.writeStderr(std.fmt.allocPrint(a, "rufix: {s}\n", .{message(err)}) catch "rufix: error\n");
+    const text = message(a, err);
+    const line = if (failedOnPath(err) and os.failed_path.len > 0)
+        std.fmt.allocPrint(a, "rufix: {s}: {s}\n", .{ text, os.failed_path })
+    else
+        std.fmt.allocPrint(a, "rufix: {s}\n", .{text});
+    io.writeStderr(line catch "rufix: error\n");
     return 1;
 }
 

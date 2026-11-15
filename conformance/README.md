@@ -23,17 +23,23 @@ Case names are unique within a file. `note` is free text for humans.
 
 `vars` — exact values, `{"NAME": "value"}`. A value is protected when the
 name contains a credential part (`TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`,
-`PAT`, `KEY`, `CREDENTIAL`, `CREDENTIALS`, split on `_`/`-`, any case) and
+`PASS`, `PWD`, `PAT`, `KEY`, `COOKIE`, `BEARER`, `CREDENTIAL`, `CREDENTIALS`,
+split on `_`/`-`, any case) and
 the value has at least 6 bytes; or when the value parses as a URL with a
 host (Go `net/url` rules) — then the URL, its host with port (IPv6 in
 brackets) and its host without port and brackets are protected, and a
 userinfo password of at least 6 bytes is protected as a credential. Values shorter than 4 bytes, empty values and values containing
 `\n` are ignored. Each protected value becomes `[S:` + the first 8 hex
-digits of SHA-256 of the value + `]`. Variables are processed in byte order
+digits of SHA-256 of the value + `]`. Two different values with one digest
+are an error (`PlaceholderCollision`), never one of them left unprotected.
+Variables are processed in byte order
 of their names; values replace longest first, equal lengths in byte order
 of the value. A value counts as a protected host only when it came from a
 URL and contains `.` and no whitespace; a value that is also a credential
-is never a host.
+is never a host. A part of a URL that is one plain word (letters, digits,
+`_`, `-`: the host `prod` of `http://prod:8080`) is replaced only where no
+letter, digit or `_` touches it, so `production` stays; the URL itself, a
+dotted host, a host with a port and every credential match anywhere.
 
 `rules` — ordered filters:
 
@@ -113,8 +119,12 @@ raw JSON text, so number literals stay as written); `stdin_raw` replaces it
 for malformed input. The store uses only the case's `vars` and `rules`.
 
 Behaviour the cases pin: PostToolUse masks string values; for `mcp__*`
-tools it masks object keys too and blocks (exit 2) when two keys would
-collide; built-in tool keys are never changed. PreToolUse ignores a
+tools it masks object keys too; built-in tool keys are never changed. When
+masking fails (two MCP keys would collide, a rule never settles) PostToolUse
+answers exit 0 with the output withheld: same shape, every string replaced by
+`[rufix: output withheld because masking failed]`, an MCP result replaced by
+that text alone; PreToolUse exits 2 (the call is blocked), as does a request
+that cannot be read. PreToolUse ignores a
 `tool_input` that is not an object. The request is one JSON value read
 from stdin; bytes after it are ignored; a value that is not an object or
 `null`, a field of the wrong type and a UTF-8 BOM all block.

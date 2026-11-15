@@ -19,23 +19,10 @@ pub const Segment = union(enum) {
     named: []const u32,
 };
 
-pub const Template = struct {
-    source: []const u8,
-    segments: []const Segment,
-};
-
 pub const Program = struct {
     start: u32,
     num_cap: u32,
     insts: []const Inst,
-    templates: []const Template = &.{},
-
-    pub fn template(self: *const Program, source: []const u8) ?[]const Segment {
-        for (self.templates) |t| {
-            if (std.mem.eql(u8, t.source, source)) return t.segments;
-        }
-        return null;
-    }
 };
 
 pub const rune_error: u32 = 0xFFFD;

@@ -85,6 +85,33 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A failure while masking a `PostToolUse` result exited 2, which blocks
+  nothing there (the tool has run): the original output reached the model. It
+  now answers with the same-shaped output with every string replaced by a
+  notice (an MCP result becomes the notice); `PreToolUse` still blocks. The
+  README says what stays open (`onFailure` needs Claude Code 2.1.295+).
+- `rufix install` with a foreign `CLAUDE_CODE_SHELL_PREFIX` stopped half way:
+  the hooks were written, the mod was not. It now refuses before the first
+  write.
+- A one-word host of a URL (`prod` of `http://prod:8080`) was replaced inside
+  other words (`production`), leaving `[S:...]uction` that never restores; it
+  is now replaced as a word only. The URL, dotted hosts, hosts with a port and
+  credentials still match anywhere.
+- Names `PASS`, `PWD`, `COOKIE` and `BEARER` (as whole parts, `DB_PASS`) mark
+  credential variables, as `TOKEN` and `PASSWORD` already did.
+- Two different protected values with one `[S:hash8]` placeholder left one of
+  them unprotected; it is now an error.
+- JSON nested deeper than 512 levels is an error (the hook blocks) instead of
+  a stack overflow, and `\u` takes hex digits only (it took a sign).
+- A settings file that is a symlink stays one (the file behind it is written);
+  a failed file or folder operation names its path; a compiled filter that does
+  not compile is named by its index.
+- Installer on a home folder with spaces; the PATH line also goes to
+  `~/.bash_profile` where it exists and to `~/.zshrc` on macOS (zsh does not
+  read `~/.profile`); a running copy left by an earlier update no longer blocks
+  the next one on Windows.
+- The CLI fixtures took an empty stdout for any text they expected.
+- Tests remove their temporary folders (each held a copy of the binary).
 - An `until_stable` rule whose match is replaced by itself never settled:
   after 16 passes the hook failed and blocked every tool call. A rule now
   settles when a pass leaves the text unchanged.
