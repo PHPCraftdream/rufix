@@ -46,8 +46,12 @@ Run `zig build test` after every change.
 ## Invariants — do not break
 
 1. **Fail-closed.** Any internal error in `hook` mode exits 2 and never
-   writes stdout: Claude Code blocks the tool call. Exit codes other than 0/2
-   from `hook` are a bug.
+   writes stdout, which blocks a `PreToolUse` call. On `PostToolUse` the tool
+   has already run and exit 2 blocks nothing, so a failure there (`hook.failed`)
+   answers exit 0 with the same-shaped output, every string replaced by a
+   notice; exit 2 only when the request itself cannot be read or has no output
+   to replace. Exit codes other than 0/2 from `hook` are a bug. Input nested
+   deeper than `json.max_depth` is an error, not a stack overflow.
 2. **Output shape is preserved exactly.** PostToolUse rewrites string values
    in place; built-in tool keys are never renamed (Claude Code would drop the
    replacement and show the original). MCP output keys are masked, colliding

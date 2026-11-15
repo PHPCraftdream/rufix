@@ -11,8 +11,9 @@
 #                                          ~/.claude/settings.json
 #
 # The binary goes to $RUFIX_BIN_DIR (default ~/.local/bin), which is added to
-# the PATH through ~/.profile, ~/.bashrc and ~/.zshrc (the ones that exist,
-# ~/.profile always). Private values come from secrets/values.zig (in the rufix
+# the PATH through ~/.profile (always), ~/.bashrc and ~/.bash_profile (where
+# they exist) and ~/.zshrc (where it exists, and made on macOS or for a zsh
+# login shell). Private values come from secrets/values.zig (in the rufix
 # folder) when it exists; run this again after editing it.
 set -e
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -32,9 +33,21 @@ TARGET="$BIN/rufix$EXE"
 TWIN="$BIN/rufix-shell$EXE"
 MARK="# rufix: binary on the PATH"
 
+# The files a new shell reads, one per line (a path may hold spaces). zsh does
+# not read ~/.profile, and zsh is the macOS default: its ~/.zshrc is made when it
+# is missing; bash's own files are touched only where they exist.
 profiles() {
   echo "$HOME/.profile"
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do [ -f "$rc" ] && echo "$rc"; done
+  zsh_login=""
+  case "${SHELL:-}" in */zsh) zsh_login=1 ;; esac
+  if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then zsh_login=1; fi
+  for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc"; do
+    if [ -f "$rc" ]; then
+      echo "$rc"
+    elif [ "$rc" = "$HOME/.zshrc" ] && [ -n "$zsh_login" ]; then
+      echo "$rc"
+    fi
+  done
 }
 
 if [ "$MODE" = "uninstall" ]; then
@@ -42,8 +55,8 @@ if [ "$MODE" = "uninstall" ]; then
     # Hooks of older versions, which applied to every repository.
     "$TARGET" uninstall --global
   fi
-  rm -f "$TARGET" "$TWIN" "$TARGET.new" "$TARGET.old" "$TWIN.new" "$TWIN.old"
-  for rc in $(profiles); do
+  rm -f "$TARGET" "$TWIN" "$TARGET.new" "$TWIN.new" "$TARGET".old* "$TWIN".old*
+  profiles | while IFS= read -r rc; do
     if [ -f "$rc" ] && grep -qF "$MARK" "$rc"; then
       # grep exits 1 when our line was the only one: the empty file is right.
       { grep -vF "$MARK" "$rc" || true; } > "$rc.rufix-tmp"
@@ -62,14 +75,15 @@ BUILT="$SRC/zig-out/bin/rufix$EXE"
 mkdir -p "$BIN"
 
 # Replaces atomically: a hook may be running the old binary right now. Where
-# that blocks the rename (Windows), the old file is moved aside first.
+# that blocks the rename (Windows), the old file is moved aside first, under a
+# name of its own: an earlier one may still be running and cannot be removed.
 place() {
   cp "$1" "$2.new"
   if ! mv -f "$2.new" "$2" 2>/dev/null; then
-    mv -f "$2" "$2.old"
+    mv -f "$2" "$2.old.$$"
     mv -f "$2.new" "$2"
-    rm -f "$2.old" 2>/dev/null || true
   fi
+  rm -f "$2".old* 2>/dev/null || true
 }
 place "$BUILT" "$TARGET"
 place "$BUILT" "$TWIN"
@@ -78,7 +92,7 @@ place "$BUILT" "$TWIN"
 # Git Bash needs the POSIX form: the colon of C:\ would split the PATH.
 PATH_BIN="$BIN"
 if command -v cygpath >/dev/null 2>&1; then PATH_BIN="$(cygpath -u "$BIN")"; fi
-for rc in $(profiles); do
+profiles | while IFS= read -r rc; do
   if ! { [ -f "$rc" ] && grep -qF "$MARK" "$rc"; }; then
     printf 'export PATH="%s:$PATH" %s\n' "$PATH_BIN" "$MARK" >> "$rc"
     echo "rufix setup: added $PATH_BIN to the PATH in $rc"
@@ -93,7 +107,7 @@ case ":$PATH:" in
   *) echo "rufix setup: open a new shell (or run: export PATH=\"$PATH_BIN:\$PATH\") to use rufix" ;;
 esac
 # Another copy earlier on the PATH would answer to `rufix` instead.
-for other in $(PATH="$PATH_BIN:$PATH" which -a "rufix$EXE" rufix 2>/dev/null | sort -u); do
+PATH="$PATH_BIN:$PATH" which -a "rufix$EXE" rufix 2>/dev/null | sort -u | while IFS= read -r other; do
   [ "$other" = "$PATH_BIN/rufix$EXE" ] || [ "$other" = "$PATH_BIN/rufix" ] || \
     echo "rufix setup: warning: another rufix is on the PATH: $other - remove it, or it may answer to rufix" >&2
 done

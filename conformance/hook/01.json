@@ -360,10 +360,47 @@
       "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": {"[S:8b58c3d4]": {"status": "up"}, "plain": ["[S:173410ad]"]}}}
     },
     {
-      "name": "edge: mcp output keys colliding after masking block",
-      "note": "Two keys that mask to the same text would drop a value; the hook blocks instead.",
+      "name": "edge: mcp output keys colliding after masking withhold the output",
+      "note": "Two keys that mask to the same text would drop a value. The tool has already run, so exit 2 would not keep the output from the model: it is replaced by a notice (an MCP result has no schema, and its keys may carry data).",
       "vars": {"JIRA_TOKEN": "rufix_test_code_secret_number_001", "JIRA_URL": "https://jira.internal.example"},
       "input": {"hook_event_name": "PostToolUse", "tool_name": "mcp__x__hosts", "tool_response": {"jira.internal.example": 1, "[S:8b58c3d4]": 2}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": "[rufix: output withheld because masking failed]"}}
+    },
+    {
+      "name": "post: a failing engine withholds the output and keeps its shape",
+      "note": "The rule never settles. A built-in tool's output keeps its keys, numbers and booleans; every string becomes the notice.",
+      "rules": [{"name": "grow", "match": "x+", "replace": "xy", "until_stable": true}],
+      "input": {"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_response": {"stdout": "x marks the spot", "stderr": "", "code": 1, "ok": true, "lines": ["a", "b"], "none": null}},
+      "exit": 0,
+      "stdout": {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": {"stdout": "[rufix: output withheld because masking failed]", "stderr": "[rufix: output withheld because masking failed]", "code": 1, "ok": true, "lines": ["[rufix: output withheld because masking failed]", "[rufix: output withheld because masking failed]"], "none": null}}}
+    },
+    {
+      "name": "pre: a failing restore still blocks the call",
+      "note": "Before the tool runs, exit 2 does block it.",
+      "vars": {"JIRA_URL": "https://jira.internal.example"},
+      "rules": [{"name": "grow", "match": "zzzz", "replace": "zzzz", "restore_match": "x+", "restore_replace": "xy", "until_stable": true}],
+      "input": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl [S:95132e89]/x"}},
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: nesting at the depth limit is fine",
+      "note": "The request object is level 1; 511 arrays below it make 512, the most the parser takes.",
+      "stdin_raw": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"tool_response\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "exit": 0,
+      "stdout": null
+    },
+    {
+      "name": "edge: nesting past the depth limit blocks",
+      "note": "One level more than the parser takes is an error, not a stack overflow.",
+      "stdin_raw": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"tool_response\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "exit": 2,
+      "stdout": null
+    },
+    {
+      "name": "edge: a unicode escape takes hex digits only",
+      "stdin_raw": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"tool_response\":\"\\u+123\"}",
       "exit": 2,
       "stdout": null
     }

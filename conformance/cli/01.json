@@ -273,6 +273,18 @@
       "stderr_nonempty": true
     },
     {
+      "name": "install with a foreign shell prefix writes nothing",
+      "note": "Another program owns CLAUDE_CODE_SHELL_PREFIX: install stops before the hooks and the mod are written, instead of leaving them half done.",
+      "args": ["install"],
+      "files": {"work/.claude/settings.local.json": "{\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"/opt/other/wrap\"}}"},
+      "absent": ["work/.claude/skills/rufix", "bin/rufix-shell"],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "rufix: CLAUDE_CODE_SHELL_PREFIX already points at another program; remove it first\n",
+      "stderr_nonempty": true,
+      "settings": {"work/.claude/settings.local.json": "{\"env\":{\"CLAUDE_CODE_SHELL_PREFIX\":\"/opt/other/wrap\"}}"}
+    },
+    {
       "name": "status empty",
       "args": ["status"],
       "exit": 0,

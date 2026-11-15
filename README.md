@@ -123,8 +123,10 @@ C:\path\to\rufix\install.cmd               # Windows cmd.exe (runs install.ps1)
 The installer builds with `zig build` (ReleaseSmall) in the rufix folder and
 puts `rufix` and its `rufix-shell` twin into `$RUFIX_BIN_DIR` (default
 `~/.local/bin`, on Windows `%LOCALAPPDATA%\rufix\bin`), which it adds to the
-PATH (profile lines in `~/.profile`, `~/.bashrc`, `~/.zshrc`; the user's PATH
-in the registry on Windows). Open a new terminal afterwards. Run it again
+PATH (a profile line in `~/.profile`, and in `~/.bashrc`, `~/.bash_profile`
+and `~/.zshrc` where they exist; `~/.zshrc` is made on macOS or for a zsh login
+shell, since zsh does not read `~/.profile`; the user's PATH in the registry on
+Windows). Open a new terminal afterwards. Run it again
 after editing `secrets/values.zig`: every repository then uses the new
 binary at once. It touches no repository and nothing in `~/.claude`.
 
@@ -191,9 +193,12 @@ pub const rules = .{
 };
 ```
 
-- `vars`: names with `TOKEN`/`SECRET`/`PASSWORD`/`PASSWD`/`PAT`/`KEY`/
-  `CREDENTIAL` parts protect the whole value (6+ bytes); URL values protect the
-  URL, its host with and without port and a userinfo password.
+- `vars`: names with `TOKEN`/`SECRET`/`PASSWORD`/`PASSWD`/`PASS`/`PWD`/`PAT`/
+  `KEY`/`COOKIE`/`BEARER`/`CREDENTIAL` parts (a whole part: `DB_PASS`, not
+  `COMPASS`) protect the whole value (6+ bytes); URL values protect the
+  URL, its host with and without port and a userinfo password. A host that is a
+  single word (`prod`) is masked as a word only, not inside `production`.
+  Any other name is ignored: give a credential a name that says so.
 - `rules`: each helper takes the real name and what the model sees, and makes
   one reversible rule that keeps the letter case and counts as
   protected-host evidence (`src/core/rules.zig`):
@@ -244,8 +249,23 @@ rufix version
 
 ## Fail-closed behaviour
 
-Any internal error in hook mode exits 2 without stdout, so Claude Code blocks
-the tool call; hook entries carry `onFailure: "block"`.
+Any internal error in hook mode exits 2 without stdout. On `PreToolUse` that
+blocks the tool call. On `PostToolUse` the tool has already run, and by Claude
+Code's hooks documentation exit 2 there only shows the hook's message to the
+model and blocks nothing: the original output would reach it. So when the
+masking of a `PostToolUse` result fails (a rule that never settles, colliding
+MCP keys, a filter that does not compile, an unreadable env file), rufix
+answers with exit 0 and replaces the output by one of the same shape in which
+every string is `[rufix: output withheld because masking failed]` (an MCP
+result becomes that notice alone). Only input rufix cannot read at all still
+exits 2.
+
+Hook entries carry `onFailure: "block"`, which needs Claude Code 2.1.295 or
+later: it makes a hook that crashes, times out or prints invalid output block
+a `PreToolUse` call. An older version ignores it and lets the call through; and
+whatever the version, a `PostToolUse` hook that does not run at all (it cannot
+start, it is killed) leaves the output unmasked, which no code of rufix can
+prevent.
 
 ## What rufix does NOT protect
 
@@ -261,6 +281,17 @@ the tool call; hook entries carry `onFailure: "block"`.
   unmasked.
 - **`@` file mentions** bypass hooks; `CLAUDE_CODE_DISABLE_FILE_MENTIONS=1`
   turns them off.
+- **A `PostToolUse` hook that does not run** (it cannot start, it times out, an
+  old Claude Code ignores `onFailure`; see Fail-closed above): the tool's output
+  reaches the model unmasked.
+- **A short or guessable value behind a placeholder**: `[S:hash8]` is the first
+  32 bits of the value's SHA-256, unsalted, so someone who can guess the value
+  (a short password, a common host name) can confirm the guess against it.
+- **Where a restored value goes**: a Bash command or file-tool call that holds
+  one protected-host placeholder gets every `[S:...]` in it restored, whatever
+  the command does with them.
+- **A variable whose name says nothing**: only names with a credential part
+  (`TOKEN`, `PASS`, `KEY`, ...) or URL values are protected.
 - **A stale binary**: re-run the installer after editing `secrets/values.zig`.
 - **Text your filters do not match** (`\b` does not separate `_` or letters).
 

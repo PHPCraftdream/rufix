@@ -4,8 +4,9 @@
 //! when present. Values are compiled into the binary: never distribute it.
 //!
 //! vars: .{ "NAME", "value" } pairs. Names with TOKEN/SECRET/PASSWORD/PASSWD/
-//! PAT/KEY/CREDENTIAL parts protect the whole value (6+ bytes); URL values
-//! protect the URL, its host and portless host.
+//! PASS/PWD/PAT/KEY/COOKIE/BEARER/CREDENTIAL parts (a whole part, split on _
+//! and -) protect the whole value (6+ bytes); URL values protect the URL, its
+//! host and portless host. Any other name protects nothing.
 //!
 //! rules: build them with the helpers of src/core/rules.zig, `rule.domain`,
 //! `rule.import`, `rule.path` and `rule.word`, each taking the real name and

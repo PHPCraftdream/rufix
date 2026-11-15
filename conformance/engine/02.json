@@ -25,6 +25,23 @@
       "steps": [
         {"op": "redact", "input": "banana", "output": "banana", "count": 3}
       ]
+    },
+    {
+      "name": "credential words: pass, pwd, cookie and bearer",
+      "note": "A name part must equal the word: COMPASS and PASSENGER are not credential names.",
+      "vars": {"ADMIN_PWD": "rufix_test_value_b02", "AUTH_BEARER": "rufix_test_value_b04", "COMPASS": "rufix_test_value_b05", "DB_PASS": "rufix_test_value_b01", "PASSENGER": "rufix_test_value_b06", "SESSION_COOKIE": "rufix_test_value_b03"},
+      "steps": [
+        {"op": "redact", "input": "rufix_test_value_b01 rufix_test_value_b02 rufix_test_value_b03 rufix_test_value_b04 rufix_test_value_b05 rufix_test_value_b06", "output": "[S:e7b42901] [S:2e68adb7] [S:73d5c452] [S:babb52f0] rufix_test_value_b05 rufix_test_value_b06", "count": 4}
+      ]
+    },
+    {
+      "name": "a one-word url host is masked as a word, not inside other words",
+      "note": "The host of http://prod:8080/x is `prod`: it is not the start of `production`, nor the end of `x_prod`. The URL and the host with its port are not words and match anywhere.",
+      "vars": {"SERVICE_URL": "http://prod:8080/x"},
+      "steps": [
+        {"op": "redact", "input": "production prod prod-db x_prod prod:8080 http://prod:8080/x", "output": "production [S:6754af96] [S:6754af96]-db x_prod [S:15a3923e] [S:acc35b55]", "count": 4},
+        {"op": "restore", "input": "[S:6754af96]", "output": "prod", "count": 1}
+      ]
     }
   ]
 }
