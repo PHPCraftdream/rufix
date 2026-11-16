@@ -109,6 +109,48 @@ pub fn cwd(a: std.mem.Allocator) ![]const u8 {
     return a.dupe(u8, std.mem.span(p));
 }
 
+/// The bash that runs shell commands. On Windows a bare `bash` resolves to
+/// System32's WSL launcher (System32 precedes Git in the system PATH, which
+/// MCP servers and hooks inherit), so Git Bash is looked up as Claude Code
+/// does: CLAUDE_CODE_GIT_BASH_PATH, then `bin\bash.exe` above a git.exe on
+/// the PATH, then a bash.exe on the PATH outside the Windows folder and
+/// WindowsApps (WSL launchers too).
+pub fn bashPath(a: std.mem.Allocator) ![]const u8 {
+    if (!windows) return "bash";
+    const set = try getenv(a, "CLAUDE_CODE_GIT_BASH_PATH");
+    if (set.len > 0 and kind(a, set) == .file) return set;
+    const path = try getenv(a, "PATH");
+    var it = std.mem.tokenizeScalar(u8, path, ';');
+    while (it.next()) |raw| {
+        const entry = pathEntry(raw);
+        if (kind(a, try join(a, entry, "git.exe")) != .file) continue;
+        // git.exe lives in <git>\cmd, <git>\bin or <git>\mingw64\bin.
+        var up = dir(entry);
+        for (0..2) |_| {
+            const b = try join(a, try join(a, up, "bin"), "bash.exe");
+            if (kind(a, b) == .file) return b;
+            up = dir(up);
+        }
+    }
+    const root = try getenv(a, "SystemRoot");
+    it.reset();
+    while (it.next()) |raw| {
+        const entry = pathEntry(raw);
+        if (root.len > 0 and std.ascii.startsWithIgnoreCase(entry, root)) continue;
+        if (std.ascii.indexOfIgnoreCase(entry, "WindowsApps") != null) continue;
+        const b = try join(a, entry, "bash.exe");
+        if (kind(a, b) == .file) return b;
+    }
+    return "bash";
+}
+
+/// A PATH entry without quotes and trailing separators.
+fn pathEntry(raw: []const u8) []const u8 {
+    var s = std.mem.trim(u8, raw, "\" ");
+    while (s.len > 3 and isSep(s[s.len - 1])) s = s[0 .. s.len - 1];
+    return s;
+}
+
 /// The user's home: %USERPROFILE% on Windows, $HOME elsewhere.
 pub fn home(a: std.mem.Allocator) ![]const u8 {
     return getenv(a, if (windows) "USERPROFILE" else "HOME");
