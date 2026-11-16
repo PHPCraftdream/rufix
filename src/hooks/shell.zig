@@ -28,7 +28,7 @@ const masked_script =
 ;
 
 pub fn run(a: std.mem.Allocator, self_path: []const u8, cmd: []const u8) u8 {
-    const bash = "bash";
+    const bash = os.bashPath(a) catch return failed();
     if (!isBashToolCall(cmd)) return os.spawnWait(a, &.{ bash, "-c", cmd }) catch failed();
     // bash reads the path: slash-separated, as a POSIX shell expects.
     const self = os.toSlash(a, self_path) catch return failed();

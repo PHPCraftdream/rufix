@@ -85,6 +85,11 @@ the project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- On Windows the shell prefix started a bare `bash`, which the system PATH
+  resolves to System32's WSL launcher: MCP servers (and hooks) started through
+  `rufix-shell` ran in Linux and failed (`/bin/bash: line 1: …`). It now runs
+  Git Bash, found as Claude Code finds it (`CLAUDE_CODE_GIT_BASH_PATH`, next to
+  `git.exe`, a `bash.exe` on the PATH outside the Windows folder).
 - A failure while masking a `PostToolUse` result exited 2, which blocks
   nothing there (the tool has run): the original output reached the model. It
   now answers with the same-shaped output with every string replaced by a

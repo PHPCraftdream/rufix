@@ -64,6 +64,16 @@ try {
   Installed "reinstall while running"
   & $rufix version | Out-Null; Succeeds "the reinstalled rufix"
 
+  Write-Host "== the shell twin runs Git Bash, not System32's WSL bash"
+  # Claude Code starts MCP servers and hooks through the twin with the
+  # Windows PATH, where System32 (bash.exe = WSL) comes before Git.
+  $savedPath = $env:Path
+  try {
+    $env:Path = "$env:SystemRoot\System32;$savedPath"
+    $uname = (& $twin 'uname -s' | Out-String).Trim(); Succeeds "rufix-shell"
+  } finally { $env:Path = $savedPath }
+  if ($uname -notmatch '^(MINGW|MSYS)') { Fail "rufix-shell ran another bash: '$uname'" }
+
   Write-Host "== set up the repository, then again"
   Push-Location $repo
   foreach ($round in 1, 2) {
